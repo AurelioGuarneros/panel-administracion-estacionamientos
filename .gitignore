@@ -1,0 +1,40 @@
+# Secretos y configuraciones locales
+.env
+.env.*
+!.env.example
+**/database_connection_configuration.json
+**/user_settings.json
+**/system_settings.json
+**/path_files_settings.json
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+*secrets*.json
+# Datos recibidos y respaldos
+*.sql.gz
+*.sql.zip
+*.dump
+*.bak
+*.backup
+backups/
+respaldos/
+downloads/
+# Python y entornos
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+# Paquetes locales
+build/
+dist/
+*.spec
+*.exe
+*.msi
+# Historial ajeno y herramientas
+.DS_Store
+.idea/
+.vscode/
