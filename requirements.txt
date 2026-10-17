@@ -1,0 +1,9 @@
+PyMySQL
+Pillow
+tkcalendar
+ttkthemes
+XlsxWriter
+openpyxl
+pycryptodome
+python-dateutil
+requests
