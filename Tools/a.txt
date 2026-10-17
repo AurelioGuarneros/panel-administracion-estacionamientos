@@ -1,0 +1,13 @@
+CREATE USER 'Admin'@'localhost' IDENTIFIED BY 'P4S3S4_ADMIN';
+
+GRANT ALL PRIVILEGES ON *.* TO 'Admin'@'localhost';
+
+FLUSH PRIVILEGES;
+CREATE DATABASE db_amores;
+CREATE DATABASE db_ciudadmendoza;
+CREATE DATABASE db_durango;
+CREATE DATABASE db_monterrey;
+CREATE DATABASE db_pinosuarez;
+CREATE DATABASE db_tenayuca;
+
+

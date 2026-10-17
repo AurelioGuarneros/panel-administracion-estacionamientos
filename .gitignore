@@ -38,3 +38,6 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Bases de datos locales
+/db/DB/db_base.sql
