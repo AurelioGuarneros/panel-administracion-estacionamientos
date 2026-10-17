@@ -1,49 +1,25 @@
 # Panel de Administración de Estacionamientos
 
-Este repositorio contiene la base para un panel de administración de estacionamientos.
+Aplicación Python/Tkinter para consultar ingresos, boletos, pensionados y reportes, de manera independiente del sistema Entrada/TPV/Salida.
 
-## Descripción
+## Estado
+**Repositorio preparado; código original pendiente de incorporación.** No hay instalador compilado ni ejecución verificada todavía.
 
-El objetivo de este proyecto es centralizar la gestión de estacionamientos, permitiendo:
+## Flujo que se debe conservar
+1. Seleccionar estacionamiento.
+2. Identificar su cuenta de correo asociada.
+3. Pulsar el botón **Cargar información**.
+4. Descargar el respaldo ZIP recibido por correo (IMAP).
+5. Importar a la base local de consulta.
+6. Mostrar claramente la **fecha del último corte disponible**, diferenciada de la fecha del correo.
 
-- administrar plazas o espacios
-- controlar ingresos y salidas
-- gestionar usuarios o personal
-- visualizar información relevante del negocio
-- llevar un seguimiento operativo de la operación
+## Compatibilidad prevista
+Windows, Linux de escritorio y Raspberry Pi OS. La adaptación de dependencias y rutas específicas de Windows aún requiere pruebas.
 
-## Estado del proyecto
+## Seguridad
+No publicar contraseñas, tokens, archivos de configuración con credenciales, correos privados ni copias reales de bases de datos. Cada instalación debe configurar localmente sus secretos; consultar `.gitignore`.
 
-Este repositorio ha sido inicializado como base de trabajo y está listo para continuar con el desarrollo del proyecto.
+## Próximos pasos
+Incorporar el código fuente depurado, preservar la versión original, probar dependencias y generar instaladores para cada sistema operativo.
 
-## Estructura
-
-Aún no se ha definido el stack tecnológico final. Este repositorio queda preparado para iniciar el desarrollo con la arquitectura y herramientas que se decidan más adelante.
-
-## Tecnologías sugeridas
-
-- Frontend: React, Next.js, Vue o Angular
-- Backend: Node.js, Express, NestJS, .NET, Laravel, etc.
-- Base de datos: PostgreSQL, MySQL, MongoDB
-- Autenticación: JWT, OAuth o sesiones
-
-## Requisitos
-
-- Node.js (si se usa JavaScript/TypeScript)
-- Git
-- Un gestor de base de datos según la tecnología elegida
-
-## Cómo comenzar
-
-```bash
-git clone https://github.com/AurelioGuarneros/panel-administracion-estacionamientos.git
-cd panel-administracion-estacionamientos
-```
-
-## Licencia
-
-Este proyecto aún no cuenta con licencia definida.
-
-## Contacto
-
-Para más información, contactar al propietario del repositorio.
+Repositorio relacionado: [Sistema de Estacionamiento Raspberry](https://github.com/AurelioGuarneros/sistema-estacionamiento-raspberry).
