@@ -46,79 +46,35 @@ class database_connection:
 
     def synchronize(self, name_config: str) -> None:
         """
-        Sincroniza la base de datos, descargando y cargando la versión más reciente si es necesario.
-
-        :param name_config (str): Nombre de la configuración de la base de datos.
-        :return: None
+        Conecta con la base de datos configurada.
+        La actualización de respaldos se realizará por separado.
         """
         try:
-            # Obtiene la configuración de la base de datos desde el archivo de configuración
             configuracion = self.config_db.obtener_db_configuracion(
-                name_config)
+                name_config
+            )
 
             host = configuracion["host"]
             user = configuracion["user"]
-            password = configuracion["password"]
-            iv = configuracion["iv"]
+            password = self.tools_instance.descifrar_AES(
+                configuracion["password"],
+                configuracion["iv"]
+            )
             database = configuracion["database"]
-            email = configuracion["email"]
 
-            if host != "localhost":
-                messagebox.showwarning(
-                    "Alerta", f"Ha seleccionado una conexión directa, por lo que no se descargará una base de datos")
-                self.connect(host, user, self.tools_instance.descifrar_AES(
-                    password, iv), database)
-                return
+            print(f"Conectando a {name_config}")
+            print(f"Base de datos: {database}")
 
-            success_email = self.download_db(email_filter=email)
+            self.connect(host, user, password, database)
 
-            if success_email is False:
-                messagebox.showwarning(
-                    "Error", f"Error al descargar la base de datos más reciente, verifique su conexión a internet e intente nuevamente, en caso de que persista el error contacte con un administrador")
-                return
+            if self.connection is None:
+                print("No se pudo establecer la conexión.")
+            else:
+                print("Conexión establecida correctamente.")
 
-            if success_email is None:
-                messagebox.showwarning(
-                    "Error", f"No se encontró una base de datos para descargar, contacte a un administrador y verifique el envio de información del estacionamiento")
-                return
-
-            date_email, file_path_db = success_email
-
-            if file_path_db is None:
-                messagebox.showwarning(
-                    "Error", f"Error al descomprimir la base de datos, contacte a un administrador, se conectará a la última versión descargada anteriormente")
-                self.connect(host, user, self.tools_instance.descifrar_AES(
-                    password, iv), database)
-                return
-
-            hoy = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            hoy = datetime.strptime(hoy, "%Y-%m-%d %H:%M:%S")
-
-            tiempo_pasado = hoy - date_email
-            print(f"Fecha actual: {hoy}")
-            print(f"Fecha envio: {date_email}")
-            print(f"diferencia de tiempo: {tiempo_pasado}")
-
-            # Calcula la diferencia en días, horas y minutos
-            dias_pasados = tiempo_pasado.days
-            horas_pasadas, _ = divmod(tiempo_pasado.seconds, 3600)
-
-            if dias_pasados >= 1 and horas_pasadas > 0:
-                messagebox.showwarning(
-                    "Alerta", f"La base de datos que acaba de descargarse fue enviada en esta fecha [{date_email}], por lo que su información no está actualizada a la fecha actual, contacte con el estacionamiento correspondiente para que envíen la información actualizada o contacte con un administrador por posible error al enviar la información.")
-
-            self.load_db(user, self.tools_instance.descifrar_AES(
-                password, iv), database, file_path_db)
-
-            self.connect(host, user, self.tools_instance.descifrar_AES(
-                password, iv), database)
-
-        except Exception as e:
-            messagebox.showwarning(
-                "Error", f"Mostrar el siguiente error a un administrador: {e}")
-            print(e)
+        except Exception as error:
+            print(f"Error de conexión: {error}")
             traceback.print_exc()
-            return False
 
     def connect(self, host: str, user: str, password: str, database: str) -> None:
         """
