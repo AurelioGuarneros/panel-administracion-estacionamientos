@@ -87,8 +87,8 @@ class Queries:
         # todas las entradas entre esas dos fechas. Si solo se especifica una fecha de inicio o una fecha de fin para entradas,
         # seleccionamos todas las entradas a partir de la fecha de inicio o hasta la fecha de fin, respectivamente.
         if 'fecha_inicio_entrada' in parametros and 'fecha_fin_entrada' in parametros:
-            where.append(f"""CorteInc BETWEEN 
-                         (SELECT MIN(Folio) FROM Cortes WHERE FechaIni BETWEEN '{parametros['fecha_inicio_entrada']}' AND '{parametros['fecha_fin_entrada']}') AND 
+            where.append(f"""CorteInc BETWEEN
+                         (SELECT MIN(Folio) FROM Cortes WHERE FechaIni BETWEEN '{parametros['fecha_inicio_entrada']}' AND '{parametros['fecha_fin_entrada']}') AND
                          (SELECT MAX(Folio) FROM Cortes WHERE FechaIni BETWEEN '{parametros['fecha_inicio_entrada']}' AND '{parametros['fecha_fin_entrada']}') """)
 
         elif 'fecha_inicio_entrada' in parametros:
@@ -151,26 +151,27 @@ class Queries:
 
         ############################################################################################################################
         if self.data_base.connection:
-            # Devolvemos la consulta SQL completa
-            query_registros = f"""DROP VIEW IF EXISTS query_auxiliar;"""
-            self.data_base.execute_query(query_registros)
-
-            query_registros = f"""CREATE VIEW query_auxiliar AS SELECT id, Entrada, Salida,TiempoTotal, Importe, CorteInc, Placas, REPLACE(REPLACE(REPLACE(REPLACE(IF(TarifaPreferente IN('Danado', 'Normal'),'Normal',TarifaPreferente), 'Danado',''),'s/co','Cortesia'), 'Per','Perdido'), 'CDO','Cancelado') AS TarifaPreferente, COALESCE(QRpromo, "N/A") FROM Entradas {where_clause};"""
-            self.data_base.execute_query(query_registros)
-
-            query_registros = f"SELECT * FROM query_auxiliar;"
-
-            print(f'Query Registros: {query_registros}')
-            registros = self.data_base.execute_query(query_registros)
-
+            # Subconsulta de solo lectura: no requiere CREATE/DROP VIEW.
+            base = f"""SELECT id, Entrada, Salida, TiempoTotal, Importe,
+                       CorteInc, Placas,
+                       REPLACE(REPLACE(REPLACE(REPLACE(
+                           IF(TarifaPreferente IN ('Danado', 'Normal'),
+                              'Normal', TarifaPreferente),
+                           'Danado', ''), 's/co', 'Cortesia'),
+                           'Per', 'Perdido'), 'CDO', 'Cancelado') AS TarifaPreferente,
+                       COALESCE(QRpromo, 'N/A') AS `COALESCE(QRpromo, "N/A")`
+                       FROM Entradas {where_clause}"""
+            registros = self.data_base.execute_query(f"SELECT * FROM ({base}) AS consulta")
+            if registros is None:
+                return None
             if len(registros) == 0:
-                messagebox.showinfo(
-                    'Info', 'No hay registros que correspondan a la consulta establecida.')
-
-            query_promociones = f"SELECT TarifaPreferente, Count(*), sum(Importe) as ImporteTot FROM query_auxiliar GROUP BY TarifaPreferente ORDER BY ImporteTot DESC;"
-
-            promociones = self.data_base.execute_query(query_promociones)
-
+                messagebox.showinfo('Info', 'No hay registros que correspondan a la consulta establecida.')
+            promociones = self.data_base.execute_query(
+                f"""SELECT TarifaPreferente, COUNT(*), SUM(Importe) AS ImporteTot
+                     FROM ({base}) AS consulta
+                     GROUP BY TarifaPreferente ORDER BY ImporteTot DESC""")
+            if promociones is None:
+                return None
             return registros, promociones
 
     def hacer_consulta_sql_pensionados(self, parametros: list):
@@ -265,8 +266,8 @@ class Queries:
         where = []
         ############################################################################################################################
         if 'fecha_inicio_entrada' in parametros and 'fecha_fin_entrada' in parametros:
-            where.append(f"""CorteInc BETWEEN 
-                         (SELECT MIN(Folio) FROM Cortes WHERE FechaIni BETWEEN '{parametros['fecha_inicio_entrada']}' AND '{parametros['fecha_fin_entrada']}') AND 
+            where.append(f"""CorteInc BETWEEN
+                         (SELECT MIN(Folio) FROM Cortes WHERE FechaIni BETWEEN '{parametros['fecha_inicio_entrada']}' AND '{parametros['fecha_fin_entrada']}') AND
                          (SELECT MAX(Folio) FROM Cortes WHERE FechaIni BETWEEN '{parametros['fecha_inicio_entrada']}' AND '{parametros['fecha_fin_entrada']}') """)
 
         elif 'fecha_inicio_entrada' in parametros:
@@ -298,25 +299,20 @@ class Queries:
             where_clause = ""
         ############################################################################################################################
         if self.data_base.connection:
-            # Devolvemos la consulta SQL completa
-            query_registros = f"""DROP VIEW IF EXISTS query_auxiliar;"""
-            self.data_base.execute_query(query_registros)
-
-            query_registros = f"""CREATE VIEW query_auxiliar AS SELECT REPLACE(REPLACE(REPLACE(REPLACE(IF(TarifaPreferente IN('Danado', 'Normal'),'Normal',TarifaPreferente), 'Danado',''),'s/co','Cortesia'), 'Per','Perdido'), 'CDO','Cancelado') AS Concepto,
-            SUM(Importe) AS Importe,
-            COUNT(*) AS Numero_Boletos
-            FROM Entradas {where_clause} GROUP BY Concepto;"""
-
-            self.data_base.execute_query(query_registros)
-
-            query = f"SELECT * FROM query_auxiliar;"
-
+            # Agrupación directa, sin vistas persistentes.
+            concepto = """REPLACE(REPLACE(REPLACE(REPLACE(
+                IF(TarifaPreferente IN ('Danado', 'Normal'), 'Normal', TarifaPreferente),
+                'Danado', ''), 's/co', 'Cortesia'), 'Per', 'Perdido'),
+                'CDO', 'Cancelado')"""
+            query = f"""SELECT {concepto} AS Concepto,
+                         SUM(Importe) AS Importe, COUNT(*) AS Numero_Boletos
+                         FROM Entradas {where_clause}
+                         GROUP BY Concepto"""
             registros = self.data_base.execute_query(query)
-
-            if len(registros) == 0:
-                messagebox.showinfo(
-                    'Info', 'No hay registros que correspondan a la consulta establecida.')
-
+            if registros is None:
+                return None
+            if not registros:
+                messagebox.showinfo('Info', 'No hay registros que correspondan a la consulta establecida.')
             return registros
 
     def hacer_consulta_sql_boletos(self, parametros: dict, intervalo:int):
@@ -363,69 +359,60 @@ class Queries:
 
         ############################################################################################################################
         if self.data_base.connection:
-            query_registros = f"""DROP VIEW IF EXISTS new_Entradas;"""
-            self.data_base.execute_query(query_registros)
-
-            query_registros = f"""  CREATE VIEW new_Entradas AS SELECT   
-                                    id,
-                                    Entrada,
-                                    Salida,
-                                    REPLACE(REPLACE(REPLACE(REPLACE(IF(TarifaPreferente IN('Danado', 'Normal'),'Normal',TarifaPreferente), 'Danado',''),'s/co','Cortesia'), 'Per','Perdido'), 'CDO','Cancelado') AS TarifaPreferente,
-                                    TIMEDIFF(Salida, Entrada) AS TiempoTotal,
-                                    Importe,
-                                    CorteInc,
-                                    vobo,
-                                    Placas,
-                                    TarifaPreferente AS TarifaOriginal,
-                                    TipoPromocion,
-                                    QRpromo
-                                    FROM Entradas
-                                    WHERE {where_clause};
-                                """
-
-            self.data_base.execute_query(query_registros)
-
-            query_registros = f"""  SELECT
-                                    GROUP_CONCAT(
-                                        DISTINCT CONCAT(
-                                            'SUM(CASE WHEN new_Entradas.TarifaPreferente = ''',
-                                            new_Entradas.TarifaPreferente,
-                                            ''' THEN 1 ELSE 0 END) AS ''',
-                                            new_Entradas.TarifaPreferente,
-                                            '_Boletos'', SUM(CASE WHEN new_Entradas.TarifaPreferente = ''',
-                                            new_Entradas.TarifaPreferente,
-                                            ''' THEN new_Entradas.Importe ELSE 0 END) AS ''',
-                                            new_Entradas.TarifaPreferente,
-                                            '_Importe'''
-                                        ) SEPARATOR ', '
-                                        )
-                                    INTO @sql FROM new_Entradas;"""
-            self.data_base.execute_query(query_registros)
-
-            query_registros = f"""  SET @sql = CONCAT(
-                                    'SELECT SEC_TO_TIME( FLOOR( TIME_TO_SEC(new_Entradas.TiempoTotal) / {intervalo} ) * {intervalo} ) AS Intervalo, ',
-                                    @sql,
-                                    ', SEC_TO_TIME( ROUND( AVG( TIME_TO_SEC(new_Entradas.TiempoTotal) ) ) ) AS Tiempo_Promedio,
-                                    SUM(new_Entradas.Importe) AS Importe_Intervalo FROM new_Entradas GROUP BY intervalo ORDER BY intervalo ASC');"""
-
-            self.data_base.execute_query(query_registros)
-
-            query_registros = f"""PREPARE stmt FROM @sql;"""
-            self.data_base.execute_query(query_registros)
-
-            query_registros = """EXECUTE stmt;"""
-            registros = self.data_base.execute_query(query_registros)
-
-            if len(registros) == 0:
-                messagebox.showinfo(
-                    'Info', 'No hay registros que correspondan a la consulta establecida.')
-                return
-
-            campos = [desc[0] for desc in self.data_base.cursor.description]
-
-            query_limpiar = """DEALLOCATE PREPARE stmt;"""
-            self.data_base.execute_query(query_limpiar)
-
+            # Agrupar por intervalo y tarifa, sin CREATE VIEW, SET ni PREPARE.
+            # La tabla dinámica se arma en Python para evitar SQL dinámico.
+            filtro = f"WHERE {where_clause}" if where_clause else ""
+            concepto = """REPLACE(REPLACE(REPLACE(REPLACE(
+                IF(TarifaPreferente IN ('Danado', 'Normal'), 'Normal', TarifaPreferente),
+                'Danado', ''), 's/co', 'Cortesia'), 'Per', 'Perdido'),
+                'CDO', 'Cancelado')"""
+            query = f"""SELECT
+                    FLOOR(TIME_TO_SEC(TIMEDIFF(Salida, Entrada)) / {intervalo}) AS bloque,
+                    {concepto} AS tarifa,
+                    COUNT(*) AS boletos,
+                    COALESCE(SUM(Importe), 0) AS importe,
+                    COALESCE(SUM(TIME_TO_SEC(TIMEDIFF(Salida, Entrada))), 0) AS segundos,
+                    COUNT(*) AS total_tiempos
+                FROM Entradas {filtro}
+                GROUP BY bloque, tarifa ORDER BY bloque ASC"""
+            filas = self.data_base.execute_query(query)
+            if filas is None:
+                return None
+            if not filas:
+                messagebox.showinfo('Info', 'No hay registros que correspondan a la consulta establecida.')
+                return None
+            tarifas = sorted({str(f[1]) for f in filas if f[1] is not None})
+            campos = ['Intervalo']
+            for tarifa in tarifas:
+                campos.extend([f'{tarifa}_Boletos', f'{tarifa}_Importe'])
+            campos.extend(['Tiempo_Promedio', 'Importe_Intervalo'])
+            grupos = {}
+            for bloque, tarifa, cantidad, importe, segundos, total_tiempos in filas:
+                if bloque is None:
+                    continue
+                bloque = int(bloque)
+                grupo = grupos.setdefault(bloque, {'tarifas': {}, 'importe': 0,
+                                                   'segundos': 0, 'cantidad': 0})
+                grupo['tarifas'][str(tarifa)] = (int(cantidad), importe)
+                grupo['importe'] += importe
+                grupo['segundos'] += float(segundos)
+                grupo['cantidad'] += int(total_tiempos)
+            def formato_tiempo(segundos):
+                # Mantener formato TIME de MariaDB, incluyendo duraciones mayores a 24 h.
+                signo = '-' if segundos < 0 else ''
+                segundos = abs(int(round(segundos)))
+                horas, resto = divmod(segundos, 3600)
+                minutos, segundos = divmod(resto, 60)
+                return f'{signo}{horas:02d}:{minutos:02d}:{segundos:02d}'
+            registros = []
+            for bloque, grupo in sorted(grupos.items()):
+                fila = [formato_tiempo(bloque * intervalo)]
+                for tarifa in tarifas:
+                    n, importe = grupo['tarifas'].get(tarifa, (0, 0))
+                    fila.extend([n, importe])
+                promedio = grupo['segundos'] / grupo['cantidad'] if grupo['cantidad'] else 0
+                fila.extend([formato_tiempo(promedio), grupo['importe']])
+                registros.append(tuple(fila))
             return registros, campos
 
     def hacer_consulta_sql_dias(self, parametros: list):#year_param: int, month_param: int):
@@ -439,7 +426,7 @@ class Queries:
         """
         # Creamos una lista vacía para agregar las cláusulas WHERE a nuestra consulta
         where = []
-        
+
         # start, end = self.tools_instance.get_start_end_month(
         #     year_param, month_param)
 
@@ -471,76 +458,34 @@ class Queries:
             where_clause = ""
 
         if self.data_base.connection:
-
-            query = f"""SELECT COUNT(id)
-                        FROM Entradas
-                        {where_clause};"""#WHERE Entrada BETWEEN '{start}' AND '{end}';"""
-            registros = self.data_base.execute_query(query)[0][0]
-            if registros == 0:
-                messagebox.showinfo(
-                    'Info', 'No hay registros que correspondan a la consulta establecida.')
-                return
-
-            # query = f"""-- Se Obtiene el rango de folios
-            #             SELECT COALESCE(MIN(Folio), 0), COALESCE(MAX(Folio), 0) INTO @inicio_corte, @fin_corte
-            #             FROM Cortes
-            #             WHERE FechaIni BETWEEN '{start}' AND '{end}';"""
-            # self.data_base.execute_query(query)
-
-            query = """DROP TEMPORARY TABLE IF EXISTS temp_table;"""
-            self.data_base.execute_query(query)
-
-            query = f"""-- Crear una tabla temporal para almacenar los resultados
-                            CREATE TEMPORARY TABLE temp_table AS
-                            SELECT
-                                id,
-                                Entrada,
-                                Salida,
-                                TiempoTotal,
-                                Importe,
-                                CorteInc,
-                                Placas,
-                                REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IF(TarifaPreferente IN('Danado', 'Normal'), 'Normal', TarifaPreferente), 'Danado', ''), 's/co', 'Cortesia'), 'Per', 'Perdido'), 'CDO', 'Cancelado'), 'PRV', 'Proveedor'), 'SNR','Sonora_Grill') AS TarifaPreferente
-                            FROM Entradas {where_clause};"""
-                            #WHERE CorteInc BETWEEN @inicio_corte AND @fin_corte;"""
-            self.data_base.execute_query(query)
-
-            query = f"""-- Obtiene una lista de TarifaPreferente únicas dentro del rango de fechas
-                        SELECT GROUP_CONCAT(DISTINCT CONCAT('SUM(CASE WHEN TarifaPreferente = "', TarifaPreferente, '" THEN 1 ELSE 0 END) AS "', TarifaPreferente, '"')) INTO @tarifa_columns
-                        FROM temp_table;"""
-            self.data_base.execute_query(query)
-
-            query = f"""-- Consulta principal
-                        SET @sql = CONCAT('
-                            SELECT 
-                                DAY(Entrada) AS DIA,
-                                DATE(Entrada) AS FECHA,
-                                COUNT(id) AS EXPEDIDOS,
-                                ', @tarifa_columns, ',
-                                --COUNT(CASE WHEN TarifaPreferente IS NOT NULL THEN 1 ELSE NULL END) AS COBRADOS,
-                                SUM(Importe) AS IMPORTE
-                            FROM temp_table
-                            GROUP BY DIA
-                            ORDER BY DIA;
-                        ');"""
-            self.data_base.execute_query(query)
-
-            query = f"""PREPARE stmt FROM @sql;"""
-            self.data_base.execute_query(query)
-
-            query = """EXECUTE stmt;"""
-            registros = self.data_base.execute_query(query)
-
-            if len(registros) == 0:
-                messagebox.showinfo(
-                    'Info', 'No hay registros que correspondan a la consulta establecida.')
-                return
-
-            campos = [desc[0] for desc in self.data_base.cursor.description]
-
-            query_limpiar = """DEALLOCATE PREPARE stmt;"""
-            self.data_base.execute_query(query_limpiar)
-
+            concepto = """REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                IF(TarifaPreferente IN ('Danado', 'Normal'), 'Normal', TarifaPreferente),
+                'Danado', ''), 's/co', 'Cortesia'), 'Per', 'Perdido'),
+                'CDO', 'Cancelado'), 'PRV', 'Proveedor'), 'SNR', 'Sonora_Grill')"""
+            query = f"""SELECT DATE(Entrada) AS fecha,
+                    {concepto} AS tarifa, COUNT(*) AS boletos,
+                    COALESCE(SUM(Importe), 0) AS importe
+                    FROM Entradas {where_clause}
+                    GROUP BY DATE(Entrada), tarifa
+                    ORDER BY fecha"""
+            filas = self.data_base.execute_query(query)
+            if filas is None:
+                return None
+            if not filas:
+                messagebox.showinfo('Info', 'No hay registros que correspondan a la consulta establecida.')
+                return None
+            tarifas = sorted({str(f[1]) for f in filas if f[1] is not None})
+            campos = ['DIA', 'FECHA', 'EXPEDIDOS'] + tarifas + ['IMPORTE']
+            grupos = {}
+            for fecha, tarifa, cantidad, importe in filas:
+                grupo = grupos.setdefault(fecha, {'total': 0, 'importe': 0, 'tarifas': {}})
+                grupo['total'] += int(cantidad)
+                grupo['importe'] += importe
+                grupo['tarifas'][str(tarifa)] = int(cantidad)
+            registros = []
+            for fecha, grupo in sorted(grupos.items()):
+                registros.append(tuple([fecha.day, fecha, grupo['total']] +
+                    [grupo['tarifas'].get(t, 0) for t in tarifas] + [grupo['importe']]))
             return registros, campos
 
     def hacer_consulta_sql_ingresos_pensiones(self, year_param: int, month_param: int):

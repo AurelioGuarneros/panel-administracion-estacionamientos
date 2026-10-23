@@ -18,6 +18,7 @@ from pathlib import Path
 
 from Config.config_database import DatabaseConfig
 from Tools.proyect_tools import Tools
+from activador_respaldos import verificar_integridad
 
 
 class ActualizadorRespaldos:
@@ -58,6 +59,127 @@ class ActualizadorRespaldos:
                     estado TEXT DEFAULT 'Sin actualizar'
                 )
             """)
+
+    def inicializar_importaciones(self):
+        """Registra únicamente respaldos instalados correctamente."""
+        with self.conectar_registro() as conexion:
+            conexion.execute("""
+                CREATE TABLE IF NOT EXISTS importaciones (
+                    estacionamiento TEXT PRIMARY KEY,
+                    uid_importado TEXT NOT NULL,
+                    fecha_importacion REAL NOT NULL,
+                    archivo TEXT NOT NULL
+                )
+            """)
+
+    def obtener_ultima_importacion(self, estacionamiento):
+        self.inicializar_importaciones()
+
+        with self.conectar_registro() as conexion:
+            fila = conexion.execute("""
+                SELECT uid_importado, fecha_importacion, archivo
+                FROM importaciones
+                WHERE estacionamiento = ?
+            """, (estacionamiento,)).fetchone()
+
+        if fila is None:
+            return None
+
+        return {
+            "uid": fila[0],
+            "fecha": fila[1],
+            "archivo": fila[2]
+        }
+
+    def registrar_importacion(self, estacionamiento, uid, archivo):
+        """Llamar solamente después de activar y validar la base."""
+        self.inicializar_importaciones()
+
+        with self.conectar_registro() as conexion:
+            conexion.execute("""
+                INSERT INTO importaciones (
+                    estacionamiento,
+                    uid_importado,
+                    fecha_importacion,
+                    archivo
+                )
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(estacionamiento)
+                DO UPDATE SET
+                    uid_importado = excluded.uid_importado,
+                    fecha_importacion = excluded.fecha_importacion,
+                    archivo = excluded.archivo
+            """, (
+                estacionamiento,
+                str(uid),
+                time.time(),
+                str(archivo)
+            ))
+
+
+    def registrar_preparacion(self, estacionamiento, uid, archivo, base_temporal):
+        """Registra un respaldo validado en una base temporal."""
+        self.inicializar_importaciones()
+
+        with self.conectar_registro() as conexion:
+            conexion.execute("""
+                CREATE TABLE IF NOT EXISTS preparaciones (
+                    estacionamiento TEXT PRIMARY KEY,
+                    uid TEXT NOT NULL,
+                    archivo TEXT NOT NULL,
+                    base_temporal TEXT NOT NULL,
+                    fecha REAL NOT NULL
+                )
+            """)
+
+            conexion.execute("""
+                INSERT INTO preparaciones
+                    (estacionamiento, uid, archivo, base_temporal, fecha)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(estacionamiento)
+                DO UPDATE SET
+                    uid = excluded.uid,
+                    archivo = excluded.archivo,
+                    base_temporal = excluded.base_temporal,
+                    fecha = excluded.fecha
+            """, (
+                estacionamiento,
+                str(uid),
+                str(archivo),
+                base_temporal,
+                time.time()
+            ))
+
+    def obtener_ultima_preparacion(self, estacionamiento):
+        """Consulta qué UID fue restaurado y validado temporalmente."""
+        self.inicializar_importaciones()
+
+        with self.conectar_registro() as conexion:
+            conexion.execute("""
+                CREATE TABLE IF NOT EXISTS preparaciones (
+                    estacionamiento TEXT PRIMARY KEY,
+                    uid TEXT NOT NULL,
+                    archivo TEXT NOT NULL,
+                    base_temporal TEXT NOT NULL,
+                    fecha REAL NOT NULL
+                )
+            """)
+
+            fila = conexion.execute("""
+                SELECT uid, archivo, base_temporal, fecha
+                FROM preparaciones
+                WHERE estacionamiento = ?
+            """, (estacionamiento,)).fetchone()
+
+        if fila is None:
+            return None
+
+        return {
+            "uid": fila[0],
+            "archivo": fila[1],
+            "base_temporal": fila[2],
+            "fecha": fila[3]
+        }
 
     def listar_estacionamientos(self):
         archivo = self.configuracion.database_config_file
@@ -415,7 +537,43 @@ class ActualizadorRespaldos:
                 pass
 
 
-    def restaurar_temporal(self, nombre, password_importador):
+    def activar_preparacion(self, nombre, uid, archivo):
+        """Activa con helper privilegiado instalado; nunca ejecuta el panel como root."""
+        import subprocess
+        estaciones = {e["nombre"]: e for e in self.listar_estacionamientos()}
+        base = estaciones[nombre]["database"]
+        preparado = self.obtener_ultima_preparacion(nombre)
+        if not preparado or str(preparado["uid"]) != str(uid):
+            raise RuntimeError("UID sin preparación validada")
+        if preparado["base_temporal"] != "panel_stage_" + base:
+            raise RuntimeError("La preparación corresponde a otra base")
+        proceso = subprocess.run(
+            ["sudo", "-n", "/usr/local/sbin/panel-activar-seguro", base],
+            capture_output=True, text=True, timeout=300
+        )
+        if proceso.returncode:
+            raise RuntimeError((proceso.stderr or proceso.stdout).strip()[-600:])
+        self.registrar_importacion(nombre, uid, archivo)
+        return proceso.stdout.strip()
+
+    def restaurar_temporal(self, nombre, password_importador, archivo_exacto=None):
+
+        import configparser
+
+        configuracion = configparser.ConfigParser()
+        ruta_credenciales = (
+            Path.home()
+            / ".config/panel-estacionamientos/importador_temporal.cnf"
+        )
+
+        if not configuracion.read(ruta_credenciales):
+            raise RuntimeError(
+                "No se encontraron las credenciales del importador temporal"
+            )
+
+        credenciales = configuracion["client"]
+        usuario_importador = credenciales["user"]
+        password_importador = credenciales["password"]
         """
         Restaura un respaldo en una base temporal.
         No modifica la base definitiva del estacionamiento.
@@ -453,11 +611,13 @@ class ActualizadorRespaldos:
         if not archivos:
             raise FileNotFoundError("No existe respaldo descargado")
 
-        archivo = archivos[0]
+        archivo = Path(archivo_exacto) if archivo_exacto else archivos[0]
+        if archivo not in archivos:
+            raise RuntimeError("El ZIP indicado no pertenece a los respaldos descargados")
 
         conexion = pymysql.connect(
             unix_socket="/run/mysqld/mysqld.sock",
-            user="importador_panel",
+            user=usuario_importador,
             password=password_importador,
             autocommit=True
         )
@@ -493,15 +653,16 @@ class ActualizadorRespaldos:
                 raise ValueError("ZIP con estructura incorrecta")
 
             entorno = os.environ.copy()
-            entorno["MYSQL_PWD"] = password_importador
+            entorno.pop("MYSQL_PWD", None)
 
             proceso = subprocess.Popen(
                 [
                     "mariadb",
+                    "--defaults-extra-file=" + str(ruta_credenciales),
                     "--protocol=socket",
                     "--default-character-set=utf8mb4",
                     "--abort-source-on-error",
-                    "-u", "importador_panel",
+                    "-u", usuario_importador,
                     temporal
                 ],
                 stdin=subprocess.PIPE,
@@ -537,15 +698,17 @@ class ActualizadorRespaldos:
 
         conexion = pymysql.connect(
             unix_socket="/run/mysqld/mysqld.sock",
-            user="importador_panel",
+            user=usuario_importador,
             password=password_importador,
             database=temporal
         )
 
         try:
-            with conexion.cursor() as cursor:
-                cursor.execute("SHOW TABLES")
-                tablas = [fila[0] for fila in cursor.fetchall()]
+            resultado_validacion = verificar_integridad(
+                conexion,
+                temporal
+            )
+            tablas = sorted(resultado_validacion.keys())
         finally:
             conexion.close()
 
