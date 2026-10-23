@@ -68,7 +68,7 @@ class Controller_Select_Conection:
             db_list = []
             db_name_conections = []
             for config in data["settings"]:
-                if len(config["name_config"]) > 0:
+                if len(config["name_config"]) > 0 and config.get("activo", True):
                     if config["name_config"] == "Admin":
                         pass
                     else:

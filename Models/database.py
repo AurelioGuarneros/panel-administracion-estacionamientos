@@ -189,43 +189,77 @@ class database_connection:
 
         return success_email
 
-    def load_db(self, user: str, password: str, old_db: str, new_db: str) -> None:
+    def load_db(self, user: str, password: str, old_db: str, new_db: str) -> bool:
         """
-        Carga una base de datos desde un archivo SQL.
+        Importa un archivo SQL en la base indicada.
 
-        :param user (str): Usuario de la base de datos.
-        :param password (str): Contraseña del usuario de la base de datos.
-        :param old_db (str): Nombre de la base de datos existente.
-        :param new_db (str): Ruta al archivo SQL que contiene la nueva base de datos.
-        :return: None
+        Devuelve True si MariaDB finaliza correctamente.
+        Devuelve False si ocurre algún error.
+
+        IMPORTANTE:
+        Esta función no debe utilizarse directamente sobre
+        bases de datos de producción. Primero se debe
+        restaurar y validar en una base temporal.
         """
+        import os
+        import subprocess
+        from pathlib import Path
+
+        archivo_sql = Path(new_db)
+
+        if not archivo_sql.is_file():
+            print(f"ERROR: No existe el archivo SQL: {archivo_sql}")
+            return False
+
+        if not old_db or not old_db.replace("_", "").isalnum():
+            print("ERROR: Nombre de base de datos no válido.")
+            return False
+
+        if system() == "Windows":
+            ejecutable = "C:/xampp/mysql/bin/mysql.exe"
+        elif system() == "Linux":
+            ejecutable = "mysql"
+        else:
+            print("ERROR: Sistema operativo incompatible.")
+            return False
+
+        # La contraseña no aparece en la línea de comandos.
+        entorno = os.environ.copy()
+        entorno["MYSQL_PWD"] = password
+
+        comando = [
+            ejecutable,
+            "--default-character-set=utf8mb4",
+            "-u", user,
+            old_db
+        ]
+
         try:
-            if system() == "Windows":
-                command = f"cd C:/xampp/mysql/bin && mysql -u {user} -p{password} {old_db} < {new_db}"
-            elif system() == "Linux":
-                command = f"mysql -u {user} -p{password} {old_db} < {new_db}"
-            else:
-                raise self.IncompatibilidadSistema(
-                    "Incompatibilidad con el sistema operativo")
-                
-            self.tools_instance.remove_extra_data_from_database(new_db)
+            with archivo_sql.open("rb") as entrada:
+                resultado = subprocess.run(
+                    comando,
+                    stdin=entrada,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    env=entorno,
+                    check=False
+                )
 
-            # Ejecutar el comando para cargar la base de datos
-            run(command, shell=True)
-            print("Base de datos cargada exitosamente.")
+            if resultado.returncode != 0:
+                error = resultado.stderr.decode(
+                    "utf-8", errors="replace"
+                )
+                print("ERROR: MariaDB rechazó la importación.")
+                print(error.strip())
+                return False
 
-            try:
-                remove(new_db)
-                print("Archivo .sql eliminado exitosamente.")
-            except Exception as e:
-                print(f"No se pudo eliminar el archivo .sql: {e}")
+            print("Importación finalizada correctamente.")
+            print("Archivo SQL conservado:", archivo_sql)
+            return True
 
-        except CalledProcessError as error:
-            print(f"Error al ejecutar el comando: {error}")
-        except self.IncompatibilidadSistema as error:
-            print(f"Error: {error}")
         except Exception as error:
-            print(f"Error al ejecutar el comando: {error}")
+            print(f"ERROR durante la importación: {error}")
+            return False
 
     class IncompatibilidadSistema(Exception):
         """
