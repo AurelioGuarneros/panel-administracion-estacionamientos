@@ -29,7 +29,7 @@ class View_Conect:
         :param user_name (str or None): nombre del usuario.
         :param reportes (dict or None): diccionario con los permisos del usuario.
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -88,9 +88,9 @@ class View_Conect:
         """
         Crea toda la interface para cambiar de conexion
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -167,9 +167,9 @@ class View_Conect:
         """
         Destruye el panel principal.
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -183,9 +183,9 @@ class View_Conect:
         """
         Desactiva los botones de la interface
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -197,9 +197,9 @@ class View_Conect:
         """
         Activa los botones de la interface
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -211,9 +211,9 @@ class View_Conect:
         """
         Elimina el panel y detiene la ejecución del hilo donde se ejecuta la ventana
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -227,12 +227,15 @@ class View_Conect:
         """
         Muestra un cuadro de diálogo para informar al usuario que se está cerrando la aplicación y detiene la ejecución del programa.
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
         """
         self.desconectar()
         raise SystemExit
+
+from panel_mejoras import instalar_mejoras
+instalar_mejoras(View_Conect)

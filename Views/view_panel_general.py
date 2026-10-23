@@ -18,7 +18,7 @@ class View_Panel_General:
     :param estacionamiento (str): Nombre del estacionamiento.
     :param query (Queries): Objeto de tipo Queries que tiene la conexion a la base de datos.
 
-    :raises None: 
+    :raises None:
 
     :return:
         - None
@@ -35,7 +35,7 @@ class View_Panel_General:
         :param estacionamiento (str): Nombre del estacionamiento.
         :param query (Queries): Objeto de tipo Queries que tiene la conexion a la base de datos.
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -154,9 +154,9 @@ class View_Panel_General:
         """
         Crea y empaqueta los campos de consulta en la ventana.
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -697,9 +697,9 @@ class View_Panel_General:
         """
         Crea una tabla en la interfaz y la llena con los datos de la base de datos.
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -745,13 +745,13 @@ class View_Panel_General:
         self.tabla.configure(xscroll=scrollbar_X.set)
         scrollbar_X.grid(row=1, column=0, sticky='EW')
 
-        # Empaqueta el Treeview en la ventana
-        self.tabla.grid(row=0, column=0, sticky='NESW', padx=5,
-                        pady=5, ipadx=5, ipady=5, columnspan=2, rowspan=2)
+        # La tabla ocupa solamente la celda principal.
+        # Las barras de desplazamiento conservan sus propias celdas.
+        self.tabla.grid(row=0, column=0, sticky='NSEW', padx=5, pady=5)
 
-        seccion_tabla.grid_propagate(False)
-        seccion_tabla.grid_rowconfigure(
-            0, weight=1, minsize=0, maxsize=self.max_size_x)
+        # Permitir que el contenedor calcule correctamente su tamaño.
+        seccion_tabla.grid_propagate(True)
+        seccion_tabla.grid_rowconfigure(0, weight=1)
 
     def llenar_tabla(self,
                      registros):
@@ -760,7 +760,7 @@ class View_Panel_General:
 
         :param registros (list): Un conjunto de tuplas que representan los registros obtenidos de la base de datos.
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -768,18 +768,20 @@ class View_Panel_General:
         # Limpia la tabla antes de llenarla con nuevos registros
         self.vaciar_tabla()
 
-        if self.registros:
+
+        if registros:
             for registro in registros:
                 # Pasa los valores del registro como tupla
                 self.tabla.insert('', 'end', values=registro)
+
 
     def vaciar_tabla(self):
         """
         Elimina todas las filas de la tabla.
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -791,9 +793,9 @@ class View_Panel_General:
         """
         Elimina todos los registros de la variable registros y vacia la tabla
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -807,9 +809,9 @@ class View_Panel_General:
         """
         Limpia los campos de entrada de texto y variables de control en la interfaz gráfica.
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -854,9 +856,9 @@ class View_Panel_General:
         La función utiliza widgets de tkinter para obtener los valores seleccionados por el usuario,
         y los almacena en variables que son utilizadas por otras funciones para crear el objeto de reserva.
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -871,9 +873,9 @@ class View_Panel_General:
         """
         Realiza una consulta de entrada con los parámetros proporcionados por el usuario y llena la tabla con los resultados obtenidos.
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -907,9 +909,9 @@ class View_Panel_General:
         """
         Elimina el panel y detiene la ejecución del hilo donde se ejecuta la ventana
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
@@ -923,9 +925,9 @@ class View_Panel_General:
         """
         Muestra un cuadro de diálogo para informar al usuario que se está cerrando la aplicación y detiene la ejecución del programa.
 
-        :param None: 
+        :param None:
 
-        :raises None: 
+        :raises None:
 
         :return:
             - None
