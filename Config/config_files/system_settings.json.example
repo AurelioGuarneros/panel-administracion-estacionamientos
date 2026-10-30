@@ -1,0 +1,9 @@
+{
+  "system_config": [
+    {
+      "email": "receptor@example.invalid",
+      "password": "CIFRADO_LOCAL_PENDIENTE",
+      "iv": "IV_LOCAL_PENDIENTE"
+    }
+  ]
+}

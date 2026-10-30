@@ -1,0 +1,19 @@
+{
+  "ussers": [
+    {
+      "UserName": "USUARIO_LOCAL",
+      "Name": "Administrador local",
+      "Password": "CONFIGURAR_LOCALMENTE",
+      "Permits": "admin",
+      "DefaultConection": "N/A",
+      "Reportes": {
+        "Reporte_General": true,
+        "Reporte_Pensionados": true,
+        "Reporte_Boletos_Ingresos": true,
+        "Reporte_Dias": true,
+        "Reporte_Ingresos_Pension": true,
+        "Reporte_Cambios_Sistema": true
+      }
+    }
+  ]
+}

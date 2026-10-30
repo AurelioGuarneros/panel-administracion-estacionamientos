@@ -1,0 +1,26 @@
+{
+  "settings": [
+    {
+      "name_config": "Admin",
+      "host": "localhost",
+      "user": "USUARIO_LOCAL",
+      "password": "CIFRADO_LOCAL_PENDIENTE",
+      "iv": "IV_LOCAL_PENDIENTE",
+      "database": "db_test",
+      "email": "admin@example.invalid"
+    },
+    {
+      "name_config": "Estacionamiento de ejemplo",
+      "host": "localhost",
+      "user": "USUARIO_LOCAL",
+      "password": "CIFRADO_LOCAL_PENDIENTE",
+      "iv": "IV_LOCAL_PENDIENTE",
+      "database": "db_ejemplo",
+      "email": "estacionamiento@example.invalid",
+      "activo": true,
+      "actualizacion_automatica": false,
+      "configuracion_verificada": false
+    }
+  ],
+  "estacionamientos_eliminados": []
+}

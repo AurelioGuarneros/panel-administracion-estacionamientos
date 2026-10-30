@@ -1,0 +1,22 @@
+{
+  "path_files": [
+    {
+      "images": [
+        {
+          "logo_pase": "Public/Images/logo_pase.jpg",
+          "icono_desconectar": "Public/Images/icono_desconectar.png",
+          "icono_salir": "Public/Images/icono_salir.png",
+          "icono_borrar": "Public/Images/icono_borrar.png",
+          "icono_calendario": "Public/Images/icono_calendario.png"
+        }
+      ],
+      "config_files": [
+        {
+          "user_settings_file": "Config/config_files/user_settings.json",
+          "database_config_file": "Config/config_files/database_connection_configuration.json",
+          "system_settings_file": "Config/config_files/system_settings.json"
+        }
+      ]
+    }
+  ]
+}

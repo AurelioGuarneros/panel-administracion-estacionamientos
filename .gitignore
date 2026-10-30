@@ -38,3 +38,22 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Bases de datos locales
+/db/DB/db_base.sql
+
+# Material exclusivo de la instalación local
+/recuperacion_publicacion/
+/Panel-Administracion-codigo-sin-credenciales/
+/Tools/a.txt
+/respaldo_codigo_*/
+*.antes*
+*.respaldo
+*.sql
+*.sqlite3
+*.sqlite3-*
+*.zip
+*.tar.gz
+/Reporte_*
+/estado_gui_*/
+/gui_aislada_*/
