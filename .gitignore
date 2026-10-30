@@ -57,3 +57,7 @@ dist/
 /Reporte_*
 /estado_gui_*/
 /gui_aislada_*/
+
+# Perfil privado de recuperación
+**/recuperacion.json
+**/importador_temporal.cnf

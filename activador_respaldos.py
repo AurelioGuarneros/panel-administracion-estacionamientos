@@ -123,6 +123,21 @@ def verificar_integridad(conexion, base):
 
         claves = cursor.fetchall()
 
+        cursor.execute("""SELECT CONSTRAINT_NAME,TABLE_NAME,COLUMN_NAME,REFERENCED_TABLE_NAME,
+                          REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE
+                          WHERE TABLE_SCHEMA=%s AND REFERENCED_TABLE_NAME IS NOT NULL
+                          ORDER BY CONSTRAINT_NAME,ORDINAL_POSITION""", (base,))
+        grupos = {}
+        for restriccion, tabla, columna, principal, col_principal in cursor.fetchall():
+            for identificador in (tabla, columna, principal, col_principal): validar_nombre(identificador)
+            grupos.setdefault((tabla, restriccion, principal), []).append((columna,col_principal))
+        for (tabla, _, principal), columnas in grupos.items():
+            no_nulos = ' AND '.join(f'h.`{a}` IS NOT NULL' for a,_ in columnas)
+            iguales = ' AND '.join(f'h.`{a}`=p.`{b}`' for a,b in columnas)
+            cursor.execute(f'SELECT COUNT(*) FROM `{base}`.`{tabla}` h WHERE {no_nulos} AND NOT EXISTS '
+                           f'(SELECT 1 FROM `{base}`.`{principal}` p WHERE {iguales})')
+            if cursor.fetchone()[0]: raise RuntimeError('Existen relaciones huérfanas en el respaldo.')
+
         for tabla, principal in relaciones:
             if not any(
                 fila[0] == tabla and fila[2] == principal

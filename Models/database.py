@@ -54,6 +54,16 @@ class database_connection:
                 name_config
             )
 
+            from Models.configuracion_respaldos import leer_perfil, asociacion_autorizada, conexion_local
+            perfil = leer_perfil(obligatorio=False)
+            if perfil and asociacion_autorizada(perfil, configuracion):
+                try:
+                    self.connection = pymysql.connect(**conexion_local(
+                        perfil, 'lector', database=configuracion['database']))
+                except Exception:
+                    messagebox.showwarning('Conexión local', 'No se pudo abrir la base local. Revisa su importación y la preparación de MariaDB.')
+                return
+
             host = configuracion["host"]
             user = configuracion["user"]
             password = self.tools_instance.descifrar_AES(

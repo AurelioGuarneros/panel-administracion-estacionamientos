@@ -62,6 +62,7 @@ class EstadoActualizaciones:
 
     def _leer_registro(self):
         conexion = None
+        self.eventos = {}
         try:
             if not self.ruta.is_file():
                 return {}, {}, ['No existe registro local. No se creó ningún archivo.']
@@ -73,7 +74,9 @@ class EstadoActualizaciones:
             conexion = sqlite3.connect(uri, uri=True, timeout=1)
             conexion.row_factory = sqlite3.Row
             permitidos = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ}
-            conexion.set_authorizer(lambda accion, *_: sqlite3.SQLITE_OK if accion in permitidos else sqlite3.SQLITE_DENY)
+            conexion.set_authorizer(lambda accion, a, b, *_: sqlite3.SQLITE_OK
+                                    if accion in permitidos or (accion == sqlite3.SQLITE_FUNCTION and b == 'max')
+                                    else sqlite3.SQLITE_DENY)
             tablas = {r[0] for r in conexion.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             avisos = []
             def leer(tabla, columnas):
@@ -92,11 +95,16 @@ class EstadoActualizaciones:
                 return resultado
             comprobaciones = leer('actualizaciones', 'estacionamiento, ultima_comprobacion, estado, ultimo_respaldo')
             importaciones = leer('importaciones', 'estacionamiento, uid_importado, fecha_importacion, archivo')
+            if 'eventos_respaldos' in tablas:
+                filas = conexion.execute("SELECT e.* FROM eventos_respaldos e JOIN (SELECT estacionamiento,MAX(id) AS ultimo FROM eventos_respaldos GROUP BY estacionamiento) u ON e.id=u.ultimo").fetchall()
+                self.eventos = {r['estacionamiento']:dict(r) for r in filas}
             despues = self.ruta.stat()
             if self._wal_pendiente() or (antes.st_ino, antes.st_size, antes.st_mtime_ns) != (despues.st_ino, despues.st_size, despues.st_mtime_ns):
+                self.eventos = {}
                 return {}, {}, ['El registro cambió durante la lectura. Refresca para obtener una lectura consistente.']
             return comprobaciones, importaciones, avisos
         except (OSError, ValueError, sqlite3.Error):
+            self.eventos = {}
             return {}, {}, ['No se pudo leer el registro local. Puede faltar permiso de lectura o tener un formato no compatible. No se modificó.']
         finally:
             if conexion is not None:
@@ -139,12 +147,23 @@ class EstadoActualizaciones:
                 motivo = 'PUNTA SANTA ROSA PV está pendiente de verificación. Su base de datos no se ha consultado ni modificado. ' + motivo
             if avisos:
                 motivo += ' Consulta los avisos del registro local.'
+            evento, _ = self._referencia(estacion, getattr(self,'eventos',{}))
+            recepcion = SIN_FECHA
+            if evento:
+                permitidos = {'ZIP y SQL validados','Ya importado; sin duplicar','Importado y activado',
+                              'Error de importación; revisar temporal o auxiliar',
+                              'Error de actualización; revisar configuración, correo o temporal'}
+                if evento.get('estado') in permitidos:
+                    estado = evento['estado']
+                    ultimo_error = estado if estado.startswith('Error') else ''
+                    motivo = 'Resultado registrado del flujo de recuperación: ' + estado + '. Archivo: ' + Path(evento.get('archivo','')).name
+                    recepcion = self._fecha(self._timestamp(evento.get('recepcion')))
             registros.append({
                 'nombre': estacion['name_config'],
                 'comprobacion': self._fecha(fecha_comprobacion),
                 # ultimo_respaldo no documenta procedencia ni UID de recepción en el esquema actual.
                 # Una fecha suelta, la cabecera Date o el mtime de un ZIP no acreditan recepción.
-                'recepcion': SIN_FECHA,
+                'recepcion': recepcion,
                 'importacion': self._fecha(fecha_importacion),
                 'estado': estado,
                 'error': ultimo_error or 'Sin error registrado en SQLite',

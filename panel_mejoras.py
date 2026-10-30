@@ -1,5 +1,5 @@
-"""Complemento seguro para el selector: gestión de estaciones y consulta IMAP.
-No descarga ni importa SQL. Compatible con Python 3.9.
+"""Complemento anterior; su procesamiento delega en el actualizador compartido.
+La interfaz vigente de recuperación es ViewEstadoActualizaciones.
 """
 import json
 import os
@@ -219,42 +219,9 @@ def administrar(self):
 
 
 def _procesar_estacion(actualizador, nombre):
-    import configparser
-    import pymysql
-    estaciones = {e["nombre"]: e for e in actualizador.listar_estacionamientos()}
-    base = estaciones[nombre]["database"]
-    temporal = "panel_stage_" + base
-    descarga = actualizador.descargar_respaldo(nombre)
-    uid, archivo = str(descarga["uid"]), descarga["archivo"]
-    instalada = actualizador.obtener_ultima_importacion(nombre)
-    if instalada and str(instalada["uid"]) == uid:
-        return f"{nombre}: UID {uid} ya instalado"
-    cnf = configparser.ConfigParser()
-    ruta = Path.home() / '.config/panel-estacionamientos/importador_temporal.cnf'
-    if not cnf.read(ruta):
-        raise RuntimeError('No existe configuración del importador')
-    cfg = cnf['client']
-    cn = pymysql.connect(unix_socket=cfg.get('socket','/run/mysqld/mysqld.sock'),
-                         user=cfg['user'],password=cfg['password'])
-    try:
-        with cn.cursor() as c:
-            c.execute('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s',(temporal,))
-            ocupada = c.fetchone()[0] > 0
-        preparacion = actualizador.obtener_ultima_preparacion(nombre)
-        if ocupada:
-            if not preparacion or str(preparacion['uid']) != uid or preparacion['base_temporal'] != temporal:
-                raise RuntimeError('Temporal ocupada por otro UID; no se sobrescribe')
-            from activador_respaldos import verificar_integridad
-            verificar_integridad(cn,temporal)
-        else:
-            restauracion = actualizador.restaurar_temporal(nombre,None,archivo_exacto=archivo)
-            from activador_respaldos import verificar_integridad
-            verificar_integridad(cn,temporal)
-            actualizador.registrar_preparacion(nombre,uid,archivo,temporal)
-    finally:
-        cn.close()
-    resultado=actualizador.activar_preparacion(nombre,uid,archivo)
-    return f"{nombre}: {resultado} (UID {uid})"
+    """Reutiliza el flujo único que también usa Estado de actualización."""
+    actualizador.actualizar_estacion(nombre)
+    return nombre + ': respaldo local disponible'
 
 
 def actualizar_todos(self):

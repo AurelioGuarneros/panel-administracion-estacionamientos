@@ -1,33 +1,48 @@
 """
 Actualizador de respaldos del Panel de Estacionamientos.
 
-Primera etapa:
-- Identificar los estacionamientos configurados.
-- Registrar fechas de actualización.
-- Evitar comprobaciones innecesarias.
-- No modificar bases de datos.
+Consulta IMAP de solo lectura, descarga validada, restauración temporal y activación local.
 """
 
 import json
 import imaplib
 import email
-from email.utils import parsedate_to_datetime
 import sqlite3
 import time
 from pathlib import Path
 
 from Config.config_database import DatabaseConfig
-from Tools.proyect_tools import Tools
 from Models.estacionamientos_config import resolver_registro
 from activador_respaldos import verificar_integridad
+from Models.configuracion_respaldos import leer_perfil, conexion_local, asociacion_autorizada
+from Models.sql_respaldo import sql_validado, MAX_ZIP
+import hashlib
+import re
+import os
+import tempfile
+import contextlib
+import ssl
+import zipfile
+
+
+
+
+def huella_archivo(ruta):
+    huella = hashlib.sha256()
+    with Path(ruta).open('rb') as f:
+        for bloque in iter(lambda:f.read(1024*1024),b''): huella.update(bloque)
+    return huella.hexdigest()
 
 
 class ActualizadorRespaldos:
 
     INTERVALO_COMPROBACION = 1800  # 30 minutos
 
-    def __init__(self):
+    def __init__(self, config_path=None, directorio=None, perfil=None):
         self.configuracion = DatabaseConfig()
+        if config_path is not None:
+            self.configuracion.database_config_file = str(config_path)
+        self.perfil = perfil if perfil is not None else leer_perfil(obligatorio=False)
 
         self.directorio = (
             Path.home()
@@ -35,6 +50,9 @@ class ActualizadorRespaldos:
             / "share"
             / "panel-estacionamientos"
         )
+
+        if directorio is not None:
+            self.directorio = Path(directorio)
 
         self.directorio.mkdir(
             parents=True,
@@ -93,7 +111,7 @@ class ActualizadorRespaldos:
             "archivo": fila[2]
         }
 
-    def registrar_importacion(self, estacionamiento, uid, archivo):
+    def registrar_importacion(self, estacionamiento, uid, archivo, fecha=None):
         """Llamar solamente después de activar y validar la base."""
         estacionamiento = self.clave_registro(estacionamiento)
         self.inicializar_importaciones()
@@ -115,7 +133,7 @@ class ActualizadorRespaldos:
             """, (
                 estacionamiento,
                 str(uid),
-                time.time(),
+                fecha if fecha is not None else time.time(),
                 str(archivo)
             ))
 
@@ -192,6 +210,13 @@ class ActualizadorRespaldos:
         with open(archivo, "r", encoding="utf-8") as f:
             datos = json.load(f)
 
+        retirados = datos.get('estacionamientos_eliminados', [])
+        reservadas = {r['database'].casefold() for r in retirados}
+        remitentes = [r.get('email','').strip().casefold() for r in datos['settings'] if r['name_config'] != 'Admin']
+        if any(not re.fullmatch(r'[a-z0-9_.+%\-]+@[a-z0-9.\-]+\.[a-z]{2,}',e) for e in remitentes):
+            raise ValueError('Remitente inválido en catálogo.')
+        if len(remitentes) != len(set(remitentes)):
+            raise ValueError('Remitentes duplicados: corrige el catálogo antes de descargar.')
         return [
             {
                 "nombre": item["name_config"],
@@ -199,7 +224,10 @@ class ActualizadorRespaldos:
                 "email": item["email"]
             }
             for item in datos["settings"]
-            if item["name_config"] != "Admin" and item.get("activo", True) and item.get("actualizacion_automatica", True) and item.get("configuracion_verificada", True)
+            if item["name_config"] != "Admin" and item["database"].casefold() not in reservadas and item.get("activo", True) and (
+                (asociacion_autorizada(self.perfil, item) if getattr(self, 'perfil', None) else
+                 item.get("actualizacion_automatica", True) and item.get("configuracion_verificada", True))
+            )
         ]
 
     def clave_registro(self, nombre):
@@ -247,123 +275,34 @@ class ActualizadorRespaldos:
         )
 
 
-    def consultar_respaldos_correo(self):
-        """
-        Consulta los últimos respaldos de todos los estacionamientos.
-        No descarga adjuntos ni modifica bases de datos.
-        """
-
-        estaciones = self.listar_estacionamientos()
-        if not estaciones:
-            return {}
-        herramientas = Tools()
-
-        configuracion_correo = (
-            self.configuracion.obtener_email_configuracion(
-                "reportes.panel@pasesa.com.mx"
-            )
-        )
-
-        password = herramientas.descifrar_AES(
-            configuracion_correo["password"],
-            configuracion_correo["iv"]
-        )
-
-        resultados = {}
-
-        conexion = imaplib.IMAP4_SSL(
-            "pop.pasesa.com.mx", 993
-        )
-
+    def _correo(self):
+        perfil = getattr(self, 'perfil', None)
+        if not perfil:
+            raise ValueError('Configura el perfil local de recuperación antes de consultar el correo.')
+        cfg = perfil['imap']
+        conexion = imaplib.IMAP4_SSL(cfg['host'], cfg['puerto'], timeout=60, ssl_context=ssl.create_default_context())
         try:
-            conexion.login(
-                configuracion_correo["email"],
-                password
-            )
+            conexion.login(cfg['usuario'], cfg['password'])
+            carpeta = cfg['carpeta']
+            if any(c.isspace() or c in '\\"' for c in carpeta):
+                carpeta = '"'+carpeta.replace('\\','\\\\').replace('"','\\"')+'"'
+            estado, _ = conexion.select(carpeta, readonly=True)
+            if estado != 'OK': raise RuntimeError('No se pudo abrir la carpeta de correo.')
+            return conexion
+        except Exception:
+            with contextlib.suppress(Exception): conexion.logout()
+            raise
 
-            conexion.select("INBOX", readonly=True)
-
-            for estacionamiento in estaciones:
-
-                nombre = estacionamiento["nombre"]
-                remitente = estacionamiento["email"]
-
-                estado, datos = conexion.uid(
-                    "search",
-                    None,
-                    "FROM",
-                    f'"{remitente}"'
-                )
-
-                if estado != "OK" or not datos or not datos[0]:
-                    resultados[nombre] = {
-                        "estado": "Sin respaldos",
-                        "fecha": None,
-                        "uid": None
-                    }
-                    continue
-
-                identificadores = datos[0].split()
-
-                uid = identificadores[-1]
-
-                estado, mensajes = conexion.uid(
-                    "fetch",
-                    uid,
-                    "(BODY.PEEK[HEADER.FIELDS (DATE SUBJECT FROM)])"
-                )
-
-                if estado != "OK":
-                    resultados[nombre] = {
-                        "estado": "Error al consultar",
-                        "fecha": None,
-                        "uid": None
-                    }
-                    continue
-
-                cabecera = next(
-                    (
-                        elemento[1]
-                        for elemento in mensajes
-                        if isinstance(elemento, tuple)
-                    ),
-                    None
-                )
-
-                if cabecera is None:
-                    resultados[nombre] = {
-                        "estado": "Sin cabecera",
-                        "fecha": None,
-                        "uid": None
-                    }
-                    continue
-
-                mensaje = email.message_from_bytes(cabecera)
-
-                fecha = mensaje.get("Date", "")
-
-                try:
-                    fecha = parsedate_to_datetime(
-                        fecha
-                    ).isoformat()
-                except Exception:
-                    pass
-
-                resultados[nombre] = {
-                    "estado": "Encontrado",
-                    "fecha": fecha,
-                    "uid": uid.decode()
-                }
-
-        finally:
+    def consultar_respaldos_correo(self):
+        resultados = {}
+        for estacion in self.listar_estacionamientos():
+            nombre = estacion['nombre']
             try:
-                conexion.logout()
+                respaldo = self.descargar_respaldo(nombre)
+                resultados[nombre] = dict(respaldo, estado='Encontrado')
             except Exception:
-                pass
-
+                resultados[nombre] = {'estado':'Error al consultar o validar respaldo', 'fecha':None, 'uid':None}
         return resultados
-
-
 
     def registrar_comprobacion(self, estacionamiento, estado):
         """
@@ -393,7 +332,7 @@ class ActualizadorRespaldos:
         """
         Consulta el correo de los estacionamientos activos
         y registra los resultados.
-        No descarga ni restaura bases de datos.
+        Descarga y valida ZIP; no restaura bases de datos.
         """
         resultados = self.consultar_respaldos_correo()
 
@@ -408,345 +347,198 @@ class ActualizadorRespaldos:
         return resultados
 
 
+    def registrar_evento(self, nombre, fase, estado, respaldo=None):
+        clave = self.clave_registro(nombre)
+        respaldo = respaldo or {}
+        with self.conectar_registro() as c:
+            c.execute("""CREATE TABLE IF NOT EXISTS eventos_respaldos (
+                id INTEGER PRIMARY KEY, estacionamiento TEXT, fecha REAL, fase TEXT,
+                estado TEXT, uid TEXT, buzon TEXT, archivo TEXT, sha256 TEXT, recepcion REAL)""")
+            c.execute('INSERT INTO eventos_respaldos VALUES (NULL,?,?,?,?,?,?,?,?,?)',
+                      (clave,time.time(),fase,estado,str(respaldo.get('uid','')),
+                       respaldo.get('buzon',''),str(respaldo.get('archivo','')),respaldo.get('sha256',''),respaldo.get('recepcion')))
+        self.registrar_comprobacion(nombre, estado)
+
     def descargar_respaldo(self, nombre):
-        """
-        Descarga el ZIP más reciente de un estacionamiento activo.
-        No importa ni modifica bases de datos.
-        """
-        import tempfile
-        import os
-        import zipfile
+        """Busca por UID descendente; valida remitente, CRC, estructura y SQL sin ejecutar."""
         from email.utils import parseaddr
-
-        estaciones = {
-            e["nombre"]: e
-            for e in self.listar_estacionamientos()
-        }
-
-        if nombre not in estaciones:
-            raise ValueError("Estacionamiento no activo o desconocido")
-
+        estaciones = {e['nombre']:e for e in self.listar_estacionamientos()}
+        if nombre not in estaciones: raise ValueError('Estacionamiento no activo o desconocido')
         estacion = estaciones[nombre]
-        remitente = estacion["email"].lower()
-
-        configuracion = self.configuracion.obtener_email_configuracion(
-            "reportes.panel@pasesa.com.mx"
-        )
-
-        password = Tools().descifrar_AES(
-            configuracion["password"],
-            configuracion["iv"]
-        )
-
-        conexion = imaplib.IMAP4_SSL(
-            "pop.pasesa.com.mx", 993
-        )
-
+        base = estacion['database']
+        if not re.fullmatch(r'db_[A-Za-z0-9_]+',base): raise ValueError('Nombre de base no permitido')
+        conexion = None
         try:
-            conexion.login(configuracion["email"], password)
-            conexion.select("INBOX", readonly=True)
-
-            estado, datos = conexion.uid(
-                "search", None, "FROM", f'"{remitente}"'
-            )
-
-            if estado != "OK" or not datos or not datos[0]:
-                raise RuntimeError("No se encontraron correos")
-
-            # Revisar los mensajes recientes hasta hallar un ZIP válido.
-            for uid in reversed(datos[0].split()[-20:]):
-                estado, mensajes = conexion.uid(
-                    "fetch", uid, "(BODY.PEEK[])"
-                )
-
-                if estado != "OK":
+            conexion = self._correo()
+            estado, datos = conexion.uid('search', None, 'FROM', '"'+estacion['email']+'"')
+            if estado != 'OK' or not datos or not datos[0]: raise RuntimeError('No se encontraron correos')
+            uids = sorted((u for u in datos[0].split() if u.isdigit()),key=int,reverse=True)
+            cfg = self.perfil['imap']
+            validez = conexion.response('UIDVALIDITY')[1]
+            buzon = hashlib.sha256((cfg['host']+':'+str(cfg['puerto'])+':'+cfg['usuario']+':'+cfg['carpeta']+':'+str(validez)).encode()).hexdigest()
+            for uid in uids:
+                # RFC822.SIZE permite rechazar mensajes desmesurados antes de traer el cuerpo.
+                estado, tam = conexion.uid('fetch', uid, '(RFC822.SIZE)')
+                cabecera = b' '.join(x for x in tam if isinstance(x,bytes)) if tam else b''
+                tamanos = re.findall(rb'RFC822.SIZE (\d+)',cabecera)
+                if estado != 'OK' or not tamanos or int(tamanos[0]) > MAX_ZIP*2:
                     continue
-
-                contenido = next(
-                    (x[1] for x in mensajes if isinstance(x, tuple)),
-                    None
-                )
-
-                if not contenido:
-                    continue
-
+                estado, mensajes = conexion.uid('fetch', uid, '(INTERNALDATE BODY.PEEK[])')
+                if estado != 'OK': continue
+                contenido = next((x[1] for x in mensajes if isinstance(x,tuple)),None)
+                if not contenido: continue
+                recibido = next((imaplib.Internaldate2tuple(x[0]) for x in mensajes if isinstance(x,tuple)),None)
                 mensaje = email.message_from_bytes(contenido)
-
-                origen = parseaddr(mensaje.get("From", ""))[1].lower()
-
-                if origen != remitente:
-                    continue
-
+                origenes = mensaje.get_all('From', [])
+                if len(origenes) != 1 or parseaddr(origenes[0])[1].casefold() != estacion['email'].casefold(): continue
                 for parte in mensaje.walk():
-                    nombre_archivo = parte.get_filename()
-
-                    if not nombre_archivo:
-                        continue
-
-                    if not nombre_archivo.lower().endswith(".zip"):
-                        continue
-
+                    if not (parte.get_filename() or '').lower().endswith('.zip'): continue
                     datos_zip = parte.get_payload(decode=True)
-
-                    if not datos_zip:
-                        continue
-
-                    directorio = (
-                        self.directorio
-                        / "respaldos"
-                        / estacion["database"]
-                    )
-                    directorio.mkdir(parents=True, exist_ok=True)
-
-                    destino = directorio / (
-                        "respaldo_uid_" + uid.decode() + ".zip"
-                    )
-
-                    with tempfile.NamedTemporaryFile(
-                        dir=directorio,
-                        prefix=".descarga_",
-                        suffix=".zip",
-                        delete=False
-                    ) as temporal:
-                        ruta_temporal = Path(temporal.name)
-                        temporal.write(datos_zip)
-
+                    if not datos_zip or len(datos_zip)>MAX_ZIP: continue
+                    carpeta = self.directorio / 'respaldos' / base
+                    carpeta.mkdir(parents=True,exist_ok=True,mode=0o700)
+                    with tempfile.NamedTemporaryFile(dir=carpeta,prefix='.descarga_',delete=False) as tmp:
+                        ruta = Path(tmp.name); tmp.write(datos_zip)
                     try:
-                        with zipfile.ZipFile(ruta_temporal) as z:
-                            archivos = [
-                                x for x in z.infolist()
-                                if not x.is_dir()
-                            ]
-
-                            if (
-                                len(archivos) != 1
-                                or not archivos[0].filename.lower().endswith(".sql")
-                            ):
-                                raise ValueError(
-                                    "El ZIP debe contener un único SQL"
-                                )
-
-                            if z.testzip() is not None:
-                                raise ValueError("ZIP dañado")
-
-                        os.replace(ruta_temporal, destino)
-
+                        # Prevalidar el SQL completo antes de cualquier conexión MariaDB.
+                        for _ in sql_validado(ruta,base): pass
+                        sha = hashlib.sha256(datos_zip).hexdigest()
+                        destino = carpeta / ('respaldo_uid_'+uid.decode()+'_'+sha[:16]+'.zip')
+                        os.replace(ruta,destino)
+                        respaldo = {'estacionamiento':nombre,'database':base,'uid':uid.decode(),
+                                    'buzon':buzon,'archivo':str(destino),'sha256':sha,
+                                    'fecha':mensaje.get('Date',''),'recepcion':time.mktime(recibido) if recibido else None}
+                        self.registrar_evento(nombre,'descarga','ZIP y SQL validados',respaldo)
+                        return respaldo
+                    except (ValueError,UnicodeError, zipfile.BadZipFile, RuntimeError):
+                        continue
                     finally:
-                        ruta_temporal.unlink(missing_ok=True)
-
-                    return {
-                        "estacionamiento": nombre,
-                        "database": estacion["database"],
-                        "uid": uid.decode(),
-                        "archivo": str(destino),
-                        "fecha": mensaje.get("Date", "")
-                    }
-
-            raise RuntimeError(
-                "No se encontró un ZIP válido entre los últimos 20 correos"
-            )
-
+                        ruta.unlink(missing_ok=True)
+            raise RuntimeError('No se encontró respaldo válido en el correo.')
+        except Exception:
+            with contextlib.suppress(Exception):
+                self.registrar_evento(nombre,'descarga','Error de actualización; revisar configuración, correo o temporal')
+            raise
         finally:
-            try:
-                conexion.logout()
-            except Exception:
-                pass
+            if conexion is not None:
+                with contextlib.suppress(Exception): conexion.logout()
 
-
-    def activar_preparacion(self, nombre, uid, archivo):
-        """Activa con helper privilegiado instalado; nunca ejecuta el panel como root."""
-        import subprocess
-        estaciones = {e["nombre"]: e for e in self.listar_estacionamientos()}
-        base = estaciones[nombre]["database"]
-        preparado = self.obtener_ultima_preparacion(nombre)
-        if not preparado or str(preparado["uid"]) != str(uid):
-            raise RuntimeError("UID sin preparación validada")
-        if preparado["base_temporal"] != "panel_stage_" + base:
-            raise RuntimeError("La preparación corresponde a otra base")
-        proceso = subprocess.run(
-            ["sudo", "-n", "/usr/local/sbin/panel-activar-seguro", base],
-            capture_output=True, text=True, timeout=300
-        )
-        if proceso.returncode:
-            raise RuntimeError((proceso.stderr or proceso.stdout).strip()[-600:])
-        self.registrar_importacion(nombre, uid, archivo)
-        return proceso.stdout.strip()
-
-    def restaurar_temporal(self, nombre, password_importador, archivo_exacto=None):
-
-        import configparser
-
-        configuracion = configparser.ConfigParser()
-        ruta_credenciales = (
-            Path.home()
-            / ".config/panel-estacionamientos/importador_temporal.cnf"
-        )
-
-        if not configuracion.read(ruta_credenciales):
-            raise RuntimeError(
-                "No se encontraron las credenciales del importador temporal"
-            )
-
-        credenciales = configuracion["client"]
-        usuario_importador = credenciales["user"]
-        password_importador = credenciales["password"]
-        """
-        Restaura un respaldo en una base temporal.
-        No modifica la base definitiva del estacionamiento.
-        """
-        import os
-        import re
-        import zipfile
-        import subprocess
+    def recibo_activacion(self, base):
+        """La marca viaja atómicamente con las tablas; no depender solo del SQLite."""
         import pymysql
+        if not re.fullmatch(r'db_[A-Za-z0-9_]+',base): raise ValueError('Base inválida.')
+        try:
+            conexion = pymysql.connect(**conexion_local(self.perfil,'lector',database=base))
+            try:
+                with conexion.cursor() as c:
+                    c.execute('SELECT sha256, UNIX_TIMESTAMP(activado) FROM `_panel_respaldo`')
+                    fila = c.fetchone()
+                return {'sha256':fila[0],'fecha':float(fila[1])} if fila else None
+            finally: conexion.close()
+        except pymysql.err.OperationalError:
+            return None
+        except pymysql.err.ProgrammingError:
+            return None
 
-        estaciones = {
-            e["nombre"]: e
-            for e in self.listar_estacionamientos()
-        }
+    def _temporal_tiene_tablas(self, base):
+        import pymysql
+        conexion = pymysql.connect(**conexion_local(self.perfil,'importador'))
+        try:
+            with conexion.cursor() as c:
+                c.execute('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s',('panel_stage_'+base,))
+                return bool(c.fetchone()[0])
+        finally: conexion.close()
 
-        if nombre not in estaciones:
-            raise ValueError("Estacionamiento no autorizado")
+    def activar_preparacion(self, nombre, uid, archivo, sha256=None):
+        import subprocess
+        estaciones = {e['nombre']:e for e in self.listar_estacionamientos()}
+        base = estaciones[nombre]['database']
+        preparado = self.obtener_ultima_preparacion(nombre)
+        calculada = huella_archivo(archivo)
+        if sha256 and calculada != sha256: raise ValueError('El ZIP cambió después de su descarga.')
+        sha256 = sha256 or calculada
+        if not preparado or str(preparado['uid']) != str(uid) or preparado['base_temporal'] != 'panel_stage_'+base:
+            raise RuntimeError('No existe preparación validada para ese respaldo.')
+        proceso = subprocess.run(['sudo','-n','/usr/local/sbin/panel-activar-seguro',base,sha256],
+                                 capture_output=True,text=True,timeout=600)
+        if proceso.returncode: raise RuntimeError('El auxiliar rechazó la activación. Revisa la instalación o el resguardo local.')
+        self.registrar_importacion(nombre,uid,archivo)
+        return 'Base activada y verificada'
 
-        estacion = estaciones[nombre]
-        base = estacion["database"]
-
-        if not re.fullmatch(r"db_[a-z0-9_]+", base):
-            raise ValueError("Nombre de base no permitido")
-
-        temporal = "panel_stage_" + base
-
-        carpeta = self.directorio / "respaldos" / base
-
-        archivos = sorted(
-            carpeta.glob("respaldo_uid_*.zip"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True
-        )
-
-        if not archivos:
-            raise FileNotFoundError("No existe respaldo descargado")
-
-        archivo = Path(archivo_exacto) if archivo_exacto else archivos[0]
-        if archivo not in archivos:
-            raise RuntimeError("El ZIP indicado no pertenece a los respaldos descargados")
-
-        conexion = pymysql.connect(
-            unix_socket="/run/mysqld/mysqld.sock",
-            user=usuario_importador,
-            password=password_importador,
-            autocommit=True
-        )
-
+    def restaurar_temporal(self, nombre, password_importador=None, archivo_exacto=None, sha256=None):
+        """Mismo mecanismo temporal; SQL validado por sentencias, sin comandos de shell."""
+        import pymysql
+        perfil = self.perfil
+        estaciones = {e['nombre']:e for e in self.listar_estacionamientos()}
+        if nombre not in estaciones: raise ValueError('Estacionamiento no autorizado')
+        base = estaciones[nombre]['database']
+        if not re.fullmatch(r'db_[A-Za-z0-9_]+',base): raise ValueError('Nombre de base no permitido')
+        temporal = 'panel_stage_'+base
+        carpeta = (self.directorio/'respaldos'/base).resolve()
+        if not archivo_exacto: raise ValueError('Selecciona un respaldo exacto validado.')
+        archivo = Path(archivo_exacto).resolve()
+        if archivo.parent != carpeta or not archivo.name.startswith('respaldo_uid_'):
+            raise ValueError('Respaldo fuera del directorio autorizado.')
+        calculada = huella_archivo(archivo)
+        if sha256 and sha256 != calculada: raise ValueError('El ZIP cambió después de su descarga.')
+        for _ in sql_validado(archivo,base): pass
+        conexion = pymysql.connect(**conexion_local(perfil,'importador',autocommit=True))
         try:
             with conexion.cursor() as cursor:
-                cursor.execute(
-                    f"CREATE DATABASE IF NOT EXISTS `{temporal}`"
-                )
-
-                cursor.execute(
-                    "SELECT COUNT(*) FROM information_schema.TABLES "
-                    "WHERE TABLE_SCHEMA=%s",
-                    (temporal,)
-                )
-
-                if cursor.fetchone()[0] != 0:
-                    raise RuntimeError(
-                        "La base temporal contiene tablas. "
-                        "No se sobrescribirá."
-                    )
-
+                cursor.execute(f'CREATE DATABASE IF NOT EXISTS `{temporal}`')
+                cursor.execute('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s',(temporal,))
+                if cursor.fetchone()[0]: raise RuntimeError('Temporal ocupada: se conserva para revisión.')
+                cursor.execute(f'USE `{temporal}`')
+                cursor.execute('SET SESSION sql_mode=%s',('NO_AUTO_VALUE_ON_ZERO',))
+                cursor.execute('SET SESSION foreign_key_checks=0')
+                for sql in sql_validado(archivo,base): cursor.execute(sql)
+                cursor.execute('SET SESSION foreign_key_checks=1')
+            verificar_integridad(conexion,temporal)
+            if huella_archivo(archivo) != calculada: raise ValueError('El ZIP cambió durante la restauración.')
         finally:
             conexion.close()
+        return {'estacionamiento':nombre,'base_temporal':temporal,'archivo':str(archivo),'estado':'Restauración temporal correcta'}
 
-        with zipfile.ZipFile(archivo) as z:
-            nombres = [
-                x for x in z.namelist()
-                if not x.endswith("/")
-            ]
+    def actualizar_estacion(self, nombre):
+        from Models.bloqueo_respaldos import bloqueo
+        with bloqueo(self.directorio/'actualizacion.lock'):
+            return self._actualizar_estacion(nombre)
 
-            if len(nombres) != 1 or not nombres[0].lower().endswith(".sql"):
-                raise ValueError("ZIP con estructura incorrecta")
-
-            entorno = os.environ.copy()
-            entorno.pop("MYSQL_PWD", None)
-
-            proceso = subprocess.Popen(
-                [
-                    "mariadb",
-                    "--defaults-extra-file=" + str(ruta_credenciales),
-                    "--protocol=socket",
-                    "--default-character-set=utf8mb4",
-                    "--abort-source-on-error",
-                    "-u", usuario_importador,
-                    temporal
-                ],
-                stdin=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=entorno
-            )
-
-            try:
-                with z.open(nombres[0]) as sql:
-                    while True:
-                        bloque = sql.read(65536)
-
-                        if not bloque:
-                            break
-
-                        proceso.stdin.write(bloque)
-
-                proceso.stdin.close()
-                errores = proceso.stderr.read().decode(
-                    "utf-8", errors="replace"
-                )
-                codigo_salida = proceso.wait()
-
-            except Exception:
-                proceso.kill()
-                proceso.wait()
-                raise
-
-        if codigo_salida != 0:
-            raise RuntimeError(
-                f"Error al restaurar {nombre}: {errores[-1000:]}"
-            )
-
-        conexion = pymysql.connect(
-            unix_socket="/run/mysqld/mysqld.sock",
-            user=usuario_importador,
-            password=password_importador,
-            database=temporal
-        )
-
+    def _actualizar_estacion(self, nombre):
+        respaldo = self.descargar_respaldo(nombre)
+        base = respaldo['database']
+        recibo = self.recibo_activacion(base)
+        if recibo and recibo.get('sha256') == respaldo['sha256']:
+            # Reconcilia un cierre entre la activación y el registro SQLite sin reimportar.
+            self.registrar_importacion(nombre,respaldo['uid'],respaldo['archivo'],fecha=recibo.get('fecha'))
+            self.registrar_evento(nombre,'importacion','Ya importado; sin duplicar',respaldo)
+            return respaldo
         try:
-            resultado_validacion = verificar_integridad(
-                conexion,
-                temporal
-            )
-            tablas = sorted(resultado_validacion.keys())
-        finally:
-            conexion.close()
+            temporal = 'panel_stage_'+base
+            preparado = self.obtener_ultima_preparacion(nombre)
+            if not (preparado and str(preparado['uid']) == respaldo['uid'] and preparado['archivo'] == respaldo['archivo'] and self._temporal_tiene_tablas(base)):
+                self.restaurar_temporal(nombre,archivo_exacto=respaldo['archivo'],sha256=respaldo['sha256'])
+                self.registrar_preparacion(nombre,respaldo['uid'],respaldo['archivo'],temporal)
+            self.activar_preparacion(nombre,respaldo['uid'],respaldo['archivo'],respaldo['sha256'])
+            self.registrar_evento(nombre,'importacion','Importado y activado',respaldo)
+            return respaldo
+        except Exception:
+            self.registrar_evento(nombre,'importacion','Error de importación; revisar temporal o auxiliar',respaldo)
+            raise
 
-        obligatorias = {
-            "Cortes", "Entradas", "MovimientosPens",
-            "MovsUsuarios", "PagosPens",
-            "Pensionados", "Usuarios"
-        }
-
-        if not obligatorias.issubset(set(tablas)):
-            raise RuntimeError(
-                "Faltan tablas obligatorias: "
-                + str(obligatorias - set(tablas))
-            )
-
-        return {
-            "estacionamiento": nombre,
-            "base_temporal": temporal,
-            "tablas": tablas,
-            "archivo": str(archivo),
-            "estado": "Restauración temporal correcta"
-        }
+    def ejecutar_todos(self, importar=False):
+        resultado = []
+        for estacion in self.listar_estacionamientos():
+            nombre = estacion['nombre']
+            try:
+                if importar: self.actualizar_estacion(nombre)
+                else: self.descargar_respaldo(nombre)
+                resultado.append((nombre,'Importado o ya disponible' if importar else 'Descargado y validado'))
+            except Exception:
+                with contextlib.suppress(Exception):
+                    self.registrar_evento(nombre,'importacion' if importar else 'descarga','Error de actualización; revisar configuración, correo o temporal')
+                resultado.append((nombre,'Error; se conservan las bases anteriores'))
+        return resultado
 
 
 if __name__ == "__main__":

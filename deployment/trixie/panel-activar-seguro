@@ -1,0 +1,150 @@
+#!/usr/bin/python3
+"""Activación privilegiada, exclusivamente para bases de consulta autorizadas."""
+import re, sys, subprocess, datetime, pathlib, os, json, tempfile, fcntl
+import pymysql
+
+TABLES = ('Cortes','Entradas','MovimientosPens','MovsUsuarios','PagosPens','Pensionados','Usuarios')
+OPTIONAL = ('Cambios',)
+RELS = {('PagosPens','Pensionados'),('MovsUsuarios','Usuarios'),('MovimientosPens','Pensionados')}
+ALLOWED = pathlib.Path('/etc/panel-estacionamientos/bases-autorizadas.txt')
+CONFIG = pathlib.Path('/etc/panel-estacionamientos/activacion.json')
+RECIBOS = pathlib.Path('/var/lib/panel-estacionamientos/activaciones')
+MARCA = '_panel_respaldo'
+
+def ident(x):
+    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', x): raise RuntimeError('Nombre inválido')
+    return '`'+x+'`'
+
+def check(cur, schema):
+    cur.execute('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s AND TABLE_TYPE=%s',(schema,'BASE TABLE'))
+    names={x[0] for x in cur.fetchall()} - {MARCA}
+    if not set(TABLES).issubset(names) or names - (set(TABLES) | set(OPTIONAL)):
+        raise RuntimeError(f'{schema}: tablas inesperadas o faltantes: {sorted(names)}')
+    cur.execute('SELECT TABLE_NAME,REFERENCED_TABLE_NAME,REFERENCED_TABLE_SCHEMA FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=%s AND REFERENCED_TABLE_NAME IS NOT NULL',(schema,))
+    rows=cur.fetchall()
+    if {(a,b) for a,b,_ in rows} != RELS or any(c!=schema for _,_,c in rows):
+        raise RuntimeError(f'{schema}: claves foráneas incorrectas')
+    cur.execute('SELECT TABLE_NAME,ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s AND TABLE_TYPE=%s',(schema,'BASE TABLE'))
+    if any(engine != 'InnoDB' for _,engine in cur.fetchall()): raise RuntimeError('Se requiere InnoDB')
+    cur.execute('SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=%s',(schema,))
+    if cur.fetchone()[0]: raise RuntimeError('No se admiten triggers')
+    cur.execute('SELECT COUNT(*) FROM information_schema.VIEWS WHERE TABLE_SCHEMA=%s',(schema,))
+    if cur.fetchone()[0]: raise RuntimeError('No se admiten vistas en el respaldo')
+    cur.execute('SELECT CONSTRAINT_NAME,TABLE_NAME,COLUMN_NAME,REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=%s AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY CONSTRAINT_NAME,ORDINAL_POSITION',(schema,))
+    grupos={}
+    for restriccion,tabla,columna,principal,col_principal in cur.fetchall():
+        grupos.setdefault((tabla,restriccion,principal),[]).append((columna,col_principal))
+    for (tabla,_,principal),columnas in grupos.items():
+        no_nulos=' AND '.join('h.'+ident(a)+' IS NOT NULL' for a,_ in columnas)
+        iguales=' AND '.join('h.'+ident(a)+'=p.'+ident(b) for a,b in columnas)
+        cur.execute(f'SELECT COUNT(*) FROM {ident(schema)}.{ident(tabla)} h WHERE {no_nulos} AND NOT EXISTS (SELECT 1 FROM {ident(schema)}.{ident(principal)} p WHERE {iguales})')
+        if cur.fetchone()[0]: raise RuntimeError('Existen relaciones huérfanas')
+    counts={}
+    for table in sorted(names):
+        cur.execute(f'SELECT COUNT(*) FROM {ident(schema)}.`{table}`')
+        counts[table]=cur.fetchone()[0]
+    return counts
+
+def escribir_recibo(base,sha):
+    RECIBOS.mkdir(parents=True,exist_ok=True,mode=0o755)
+    with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=RECIBOS,delete=False) as f:
+        json.dump({'base':base,'sha256':sha,'fecha':datetime.datetime.now(datetime.timezone.utc).isoformat()},f)
+        f.flush();os.fsync(f.fileno());tmp=f.name
+    os.chmod(tmp,0o644)
+    os.replace(tmp,RECIBOS/(base+'.json'))
+
+
+def main():
+    if os.geteuid()!=0: raise RuntimeError('Se requiere sudo')
+    if len(sys.argv) not in (2,3) or not re.fullmatch(r'db_[A-Za-z0-9_]+',sys.argv[1]): raise RuntimeError('Uso: panel_activar_seguro.py db_estacion')
+    base=sys.argv[1]
+    if base not in ALLOWED.read_text().splitlines(): raise RuntimeError('Base no autorizada por el instalador')
+    if len(sys.argv)!=3 or not re.fullmatch(r'[0-9a-f]{64}',sys.argv[2]): raise RuntimeError('Falta huella de respaldo')
+    sha=sys.argv[2]
+    cfg=json.loads(CONFIG.read_text())
+    lector=cfg['lector']
+    if not re.fullmatch(r'panel_lect_[0-9a-f]{12}',lector): raise RuntimeError('Cuenta lectora inválida')
+    lock=os.open('/var/lib/panel-estacionamientos/activacion.lock',os.O_CREAT|os.O_RDWR,0o600)
+    fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    stage='panel_stage_'+base
+    old='panel_anterior_'+base+'_'+datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    cn=None
+    try:
+        cn=pymysql.connect(unix_socket=cfg['socket'],user='root',autocommit=True)
+        with cn.cursor() as c:
+            c.execute('SELECT VERSION(),@@lower_case_table_names')
+            version,case=c.fetchone()
+            numeros=tuple(int(n) for n in re.match(r'(\d+)\.(\d+)\.(\d+)',version).groups())
+            if 'MariaDB' not in version or numeros<(10,6,1) or case!=0: raise RuntimeError('MariaDB incompatible con activación atómica o nombres originales')
+            c.execute('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s',(base,MARCA))
+            if c.fetchone()[0]:
+                c.execute(f'SELECT sha256 FROM {ident(base)}.{ident(MARCA)}')
+                fila=c.fetchone()
+                if fila and fila[0]==sha:
+                    check(c,base)
+                    escribir_recibo(base,sha)
+                    print('YA_ACTIVADA',base)
+                    return
+            prepared=check(c,stage)
+            c.execute('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME=%s',(base,))
+            exists=c.fetchone() is not None
+            live=check(c,base) if exists else None
+            if live:
+                if set(live) - set(prepared):
+                    raise RuntimeError('Respaldo no incluye tablas de la base actual: '+str(sorted(set(live)-set(prepared))))
+                for table in live:
+                    if prepared[table]<live[table]: raise RuntimeError(f'{table}: respaldo tiene menos filas; no se activa')
+                # Comprobar registros más recientes de Entradas, sin inferir equivalencia total.
+                c.execute(f'SELECT MAX(id),MAX(Entrada),MAX(Salida) FROM {ident(base)}.`Entradas`')
+                last_live=c.fetchone()
+                c.execute(f'SELECT MAX(id),MAX(Entrada),MAX(Salida) FROM {ident(stage)}.`Entradas`')
+                last_stage=c.fetchone()
+                for a,b in zip(last_live,last_stage):
+                    if a is not None and (b is None or b<a): raise RuntimeError('El respaldo parece más antiguo que la base de consulta')
+            # Respaldo antes de tocar una base existente.
+            if exists:
+                dest=pathlib.Path('/var/backups/panel-estacionamientos'); dest.mkdir(mode=0o700,parents=True,exist_ok=True)
+                archive=dest/(base+'_'+datetime.datetime.now().strftime('%Y%m%d_%H%M%S')+'.sql')
+                with os.fdopen(os.open(archive,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600),'wb') as out:
+                    proc=subprocess.run(['/usr/bin/mariadb-dump','--no-defaults','--protocol=socket','--socket='+cfg['socket'],'--user=root','--single-transaction',base],stdout=out,stderr=subprocess.PIPE)
+                if proc.returncode: archive.unlink(missing_ok=True); raise RuntimeError('Falló respaldo previo: '+proc.stderr.decode(errors='replace')[-300:])
+                archive.chmod(0o600)
+            c.execute('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s',(old,))
+            if c.fetchone()[0]: raise RuntimeError('Nombre de resguardo ocupado')
+            c.execute('SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME=%s',(old,))
+            if c.fetchone()[0]: raise RuntimeError('El esquema de resguardo ya existe')
+            if exists: c.execute('CREATE DATABASE '+ident(old))
+            else: c.execute('CREATE DATABASE IF NOT EXISTS '+ident(base))
+            c.execute(f'DROP TABLE IF EXISTS {ident(stage)}.{ident(MARCA)}')
+            c.execute(f'CREATE TABLE {ident(stage)}.{ident(MARCA)} (sha256 CHAR(64) NOT NULL, activado TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)) ENGINE=InnoDB')
+            c.execute(f'INSERT INTO {ident(stage)}.{ident(MARCA)} (sha256) VALUES (%s)',(sha,))
+            c.execute('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s',(base,MARCA))
+            tenia_marca=bool(c.fetchone()[0])
+            tablas_nuevas=sorted(prepared)+[MARCA]
+            tablas_anteriores=(sorted(live)+([MARCA] if tenia_marca else [])) if exists else []
+            moves=[]
+            if exists:
+                moves += [f'{ident(base)}.{ident(t)} TO {ident(old)}.{ident(t)}' for t in tablas_anteriores]
+            moves += [f'{ident(stage)}.{ident(t)} TO {ident(base)}.{ident(t)}' for t in tablas_nuevas]
+            # La cuenta se prepara antes de tocar los datos; grants limitados al nombre exacto.
+            base_grant=base.replace('_',r'\_')
+            c.execute(f"GRANT SELECT, SHOW VIEW ON `{base_grant}`.* TO '{lector}'@'localhost'")
+            c.execute('RENAME TABLE '+', '.join(moves))
+            try:
+                verified=check(c,base)
+                if verified!=prepared: raise RuntimeError('La validación posterior no coincide')
+            except Exception:
+                reversa=[f'{ident(base)}.{ident(t)} TO {ident(stage)}.{ident(t)}' for t in tablas_nuevas]
+                reversa += [f'{ident(old)}.{ident(t)} TO {ident(base)}.{ident(t)}' for t in tablas_anteriores]
+                c.execute('RENAME TABLE '+', '.join(reversa))
+                raise RuntimeError('Activación revertida: se conserva la base anterior') from None
+            escribir_recibo(base,sha)
+            print('ACTIVADA',base,'filas:',sum(verified.values()),'resguardo:',old if exists else 'primera instalación')
+    finally:
+        if cn is not None: cn.close()
+        os.close(lock)
+
+if __name__=='__main__':
+    try: main()
+    except Exception as e:
+        print('ERROR: activación rechazada; revisar permisos, integridad o resguardos locales.',file=sys.stderr);sys.exit(1)
