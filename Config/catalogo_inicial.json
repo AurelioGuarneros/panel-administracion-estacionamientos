@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "settings": [
+    {
+      "name_config": "Aguascalientes 143",
+      "database": "db_aguascalientes_143",
+      "email": "aguascalientes143@pasesa.com.mx",
+      "id": "db_aguascalientes_143",
+      "activo": true
+    },
+    {
+      "name_config": "Amores 1003",
+      "database": "db_amores_1003",
+      "email": "amores1003@pasesa.com.mx",
+      "id": "db_amores_1003",
+      "activo": true
+    },
+    {
+      "name_config": "Durango 205",
+      "database": "db_durango_205",
+      "email": "durango205@pasesa.com.mx",
+      "id": "db_durango_205",
+      "activo": true
+    },
+    {
+      "name_config": "Insurgentes 263",
+      "database": "db_insurgentes_263",
+      "email": "insurgentes263@pasesa.com.mx",
+      "id": "db_insurgentes_263",
+      "activo": true
+    },
+    {
+      "name_config": "Monterrey 75",
+      "database": "db_monterrey_75",
+      "email": "monterrey75@pasesa.com.mx",
+      "id": "db_monterrey_75",
+      "activo": true
+    },
+    {
+      "name_config": "Monterrey 89",
+      "database": "db_monterrey_89",
+      "email": "monterrey89@pasesa.com.mx",
+      "id": "db_monterrey_89",
+      "activo": true
+    },
+    {
+      "name_config": "Pestalozzi 1166",
+      "database": "db_pestalozzi_1166",
+      "email": "pestalozzi1166@pasesa.com.mx",
+      "id": "db_pestalozzi_1166",
+      "activo": true
+    },
+    {
+      "name_config": "Pino Suarez 27",
+      "database": "db_pino_suarez_27",
+      "email": "pinosuarez27@pasesa.com.mx",
+      "id": "db_pino_suarez_27",
+      "activo": true
+    },
+    {
+      "name_config": "Tenayuca 200",
+      "database": "db_tenayuca_200",
+      "email": "tenayuca200@pasesa.com.mx",
+      "id": "db_tenayuca_200",
+      "activo": true
+    },
+    {
+      "name_config": "Chapultepec 404",
+      "database": "db_chapultepec_404",
+      "email": "pase.chapultepec404@pasesa.com.mx",
+      "id": "db_chapultepec_404",
+      "activo": true
+    },
+    {
+      "name_config": "Puebla 257",
+      "database": "db_puebla_257",
+      "email": "pase.puebla257@pasesa.com.mx",
+      "id": "db_puebla_257",
+      "activo": true
+    },
+    {
+      "name_config": "PUNTA SANTA ROSA PV",
+      "database": "db_PUNTO_SANTA_ROSA_PV",
+      "email": "hidalgo401.pv@pasesa.com.mx",
+      "id": "db_PUNTO_SANTA_ROSA_PV",
+      "activo": true
+    }
+  ],
+  "estacionamientos_eliminados": [
+    {
+      "name_config": "Ciudad Mendoza",
+      "database": "db_ciudad_mendoza",
+      "id": "db_ciudad_mendoza"
+    }
+  ]
+}

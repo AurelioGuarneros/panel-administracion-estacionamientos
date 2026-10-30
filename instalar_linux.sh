@@ -9,6 +9,7 @@ command -v python3 >/dev/null || { echo "Instala Python 3"; exit 1; }
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python Tools/preparar_configuracion.py
 echo "Dependencias Python instaladas."
 echo "Asegura tener python3-tk y un cliente MariaDB/MySQL mediante tu gestor de paquetes."
 echo "Configura las credenciales fuera de GitHub; luego ejecuta ./iniciar_linux.sh"

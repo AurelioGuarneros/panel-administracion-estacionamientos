@@ -1,9 +1,9 @@
 {
   "ussers": [
     {
-      "UserName": "USUARIO_LOCAL",
-      "Name": "Administrador local",
-      "Password": "CONFIGURAR_LOCALMENTE",
+      "UserName": "Aurelio",
+      "Name": "Aurelio",
+      "Password": "",
       "Permits": "admin",
       "DefaultConection": "N/A",
       "Reportes": {

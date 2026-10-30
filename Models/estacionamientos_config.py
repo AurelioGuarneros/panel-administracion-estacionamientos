@@ -6,6 +6,7 @@ import re
 import stat
 from pathlib import Path
 import tempfile
+import uuid
 
 
 class ErrorValidacion(ValueError):
@@ -165,6 +166,7 @@ class EstacionamientosConfig:
         # Una plantilla nunca certifica la asociación de un estacionamiento nuevo.
         nuevo.pop('nombres_anteriores', None)
         nuevo.pop('clave_respaldo', None)
+        nuevo['id'] = str(uuid.uuid4())
         nuevo.update(campos, activo=True, ubicacion=self._ubicacion(ubicacion),
                      actualizacion_automatica=False, configuracion_verificada=False)
         datos['settings'].append(nuevo)
@@ -208,7 +210,7 @@ class EstacionamientosConfig:
         # Reserva las identidades históricas sin conservar credenciales ni permitir
         # que otro registro nuevo herede su nombre o su base accidentalmente.
         referencia = {k: copy.deepcopy(registro[k]) for k in
-                      ('name_config', 'database', 'nombres_anteriores', 'clave_respaldo') if k in registro}
+                      ('id', 'name_config', 'database', 'nombres_anteriores', 'clave_respaldo') if k in registro}
         datos.setdefault('estacionamientos_eliminados', []).append(referencia)
         datos['settings'].remove(registro)
         self._guardar(datos)

@@ -40,9 +40,19 @@ manuales de importación, fuera del flujo de estas pruebas.
 
 ## Configuración local
 
-Los cuatro archivos `Config/config_files/*.json.example` contienen rutas o datos
-ficticios. Copiarlos sin `.example` solamente si el destino no existe. No sobrescribir
-una configuración previa. Los marcadores de contraseña no permiten iniciar sesión.
+Los instaladores crean los cuatro archivos `Config/config_files/*.json` faltantes
+usando sus ejemplos y conservan íntegros los existentes. Cuando falta
+`user_settings.json`, solicitan una contraseña local y su confirmación para
+**Aurelio**, con permisos de Administrador. No existe una contraseña administrativa
+predeterminada; la plantilla tiene la contraseña vacía y no permite ingresar así.
+La contraseña no se muestra al escribirla ni se pasa como argumento de comandos.
+Si ya existe el archivo de usuarios, no se solicita contraseña ni se cambian usuarios.
+
+Para completar configuraciones en una instalación ya preparada, ejecutar desde
+la carpeta del panel `.venv/bin/python Tools/preparar_configuracion.py` en Linux
+o `.venv\Scripts\python.exe Tools\preparar_configuracion.py` en Windows.
+Las conexiones y el correo conservan marcadores ficticios: deben configurarse
+localmente antes de usarlos. Esta preparación no conecta con MariaDB ni con correo.
 
 Configurar localmente:
 
@@ -56,8 +66,9 @@ Configurar localmente:
 - `system_settings.json`: plantilla de correo. Esta versión de la interfaz no la
   utiliza para actualizar bases; no introducir credenciales de correo para estas pruebas.
 
-Las credenciales administrativas se entregan por un canal privado. Configurar los
-usuarios nuevos de cada instalación sin modificar los usuarios existentes de cajeros.
+La contraseña administrativa se elige en cada instalación y permanece en el archivo
+local excluido de Git. Se conserva el almacenamiento en texto legible del mecanismo
+de autenticación existente. No modificar los usuarios existentes de cajeros.
 El alta de un estacionamiento hereda la conexión de una plantilla existente; no crea
 la base ni habilita automáticamente su actualización.
 
@@ -78,3 +89,13 @@ eliminación del catálogo de estacionamientos es una operación distinta.
 Las pruebas utilizan datos ficticios y dobles de servicios. No validan acceso a los
 buzones, funcionamiento con bases reales ni ejecución física en Raspberry Pi.
 Consultar `PREPARACION_RASPBERRY_TRIXIE.md` para recuperación y alcance.
+
+## Catálogo de una instalación nueva
+
+El instalador incorpora `Config/catalogo_inicial.json` únicamente cuando falta el
+archivo local de conexiones. Incluye los estacionamientos validados y referencias
+retiradas, sin credenciales. Conserva sus estados y deja deshabilitada la
+actualización hasta verificar la configuración local. No mezcla catálogos existentes.
+Consultar [la prueba del catálogo en Raspberry](PRUEBA_CATALOGO_TRIXIE.md)
+para actualizar conservando configuraciones o probar el catálogo en una carpeta aislada.
+Esta versión no habilita descarga, importación ni activación de respaldos.
