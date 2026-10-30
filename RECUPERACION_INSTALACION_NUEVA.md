@@ -5,6 +5,11 @@ Versión de prueba: **`v2026.10.30-respaldos-pruebas.1`**, rama
 `v2026.10.30-catalogo-pruebas.1` no contiene este flujo.
 La primera descarga e importación real se realiza en la Raspberry de Jorge.
 
+Si el receptor IMAP y el auxiliar ya están preparados pero faltan los
+estacionamientos, seguir primero [la recuperación del catálogo existente](RECUPERAR_CATALOGO.md).
+Ese procedimiento conserva las cuentas y contraseñas y amplía autorizaciones sin
+volver a configurar IMAP ni reinstalar el auxiliar.
+
 ## Qué hace Estado de actualización
 
 Abrir la ventana lee únicamente el registro local. Sus acciones explícitas son:

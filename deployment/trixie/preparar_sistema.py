@@ -37,13 +37,16 @@ def comprobar(cursor):
         raise RuntimeError('Se requiere lower_case_table_names=0 para conservar los nombres exactos. No se cambia el servidor.')
 
 
-def verificar_grants(cursor, perfil):
+def verificar_grants(cursor, perfil, adicionales=()):
+    if any(not re.fullmatch(r'db_[A-Za-z0-9_]+',b) for b in adicionales):
+        raise ValueError('Base adicional inválida.')
     for rol in ('importador','lector'):
         usuario=perfil['mariadb'][rol]['user']
         cursor.execute('SHOW GRANTS FOR %s@localhost',(usuario,))
         permitidos=({'CREATE','DROP','INSERT','SELECT','ALTER','INDEX','REFERENCES'} if rol=='importador' else {'SELECT','SHOW VIEW'})
         prefijo='panel_stage_' if rol=='importador' else ''
         esquemas={prefijo+r['database'] for r in perfil['estaciones']}
+        admitidos=esquemas | {prefijo+b for b in adicionales}
         vistos={}
         for (grant,) in cursor.fetchall():
             if 'WITH GRANT OPTION' in grant: raise RuntimeError('No se permite delegar privilegios.')
@@ -52,11 +55,25 @@ def verificar_grants(cursor, perfil):
             privilegios={p.strip() for p in m[1].split(',')}
             if privilegios=={'USAGE'} and m[2]=='*.*': continue
             esquema=m[2].removesuffix('.*').strip('`').replace('\\','')
-            if not privilegios.issubset(permitidos) or esquema not in esquemas or 'WITH GRANT OPTION' in grant:
+            if not privilegios.issubset(permitidos) or esquema not in admitidos or 'WITH GRANT OPTION' in grant:
                 raise RuntimeError('Cuenta de recuperación con permisos excesivos.')
             vistos.setdefault(esquema,set()).update(privilegios)
         if any(not permitidos.issubset(vistos.get(esquema,set())) for esquema in esquemas):
             raise RuntimeError('Faltan permisos de recuperación por esquema.')
+
+
+def conceder_permisos(cursor, perfil, bases):
+    """Permisos por esquema exacto; reutilizados por instalación y ampliación."""
+    for base in bases:
+        if not re.fullmatch(r'db_[A-Za-z0-9_]+',base): raise ValueError('Base no autorizable.')
+        temporal = ('panel_stage_'+base).replace('_',r'\_')
+        lector = base.replace('_',r'\_')
+        imp = perfil['mariadb']['importador']['user']
+        lect = perfil['mariadb']['lector']['user']
+        if not re.fullmatch(r'panel_imp_[0-9a-f]{12}',imp) or not re.fullmatch(r'panel_lect_[0-9a-f]{12}',lect):
+            raise ValueError('Cuentas de recuperación inválidas.')
+        cursor.execute(f"GRANT CREATE, DROP, INSERT, SELECT, ALTER, INDEX, REFERENCES ON `{temporal}`.* TO '{imp}'@'localhost'")
+        cursor.execute(f"GRANT SELECT, SHOW VIEW ON `{lector}`.* TO '{lect}'@'localhost'")
 
 
 def preparar(usuario, perfil_ruta, instalar=False):
@@ -109,14 +126,7 @@ def preparar(usuario, perfil_ruta, instalar=False):
             for rol in ('importador','lector'):
                 cred = perfil['mariadb'][rol]
                 cursor.execute('CREATE USER IF NOT EXISTS %s@localhost IDENTIFIED BY %s',(cred['user'],cred['password']))
-            for base in bases:
-                # '_' es comodín en GRANT incluso con backticks: escapar cada uno.
-                temporal = ('panel_stage_'+base).replace('_',r'\_')
-                lector = base.replace('_',r'\_')
-                imp = perfil['mariadb']['importador']['user']
-                lect = perfil['mariadb']['lector']['user']
-                cursor.execute(f"GRANT CREATE, DROP, INSERT, SELECT, ALTER, INDEX, REFERENCES ON `{temporal}`.* TO '{imp}'@'localhost'")
-                cursor.execute(f"GRANT SELECT, SHOW VIEW ON `{lector}`.* TO '{lect}'@'localhost'")
+            conceder_permisos(cursor,perfil,bases)
             verificar_grants(cursor,perfil)
             for rol in ('importador','lector'):
                 prueba = pymysql.connect(**conexion_local(perfil,rol))

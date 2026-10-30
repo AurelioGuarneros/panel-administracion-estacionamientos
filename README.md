@@ -109,3 +109,10 @@ desde «Estado de actualización», mediante descarga validada, restauración te
 y el auxiliar de activación. No consulta servicios al abrir la ventana.
 Seguir [la preparación y primera recuperación real](RECUPERACION_INSTALACION_NUEVA.md)
 en la Raspberry de destino. El perfil es local y no cambia los JSON existentes.
+
+## Recuperar un catálogo local que solo contiene ejemplos
+
+La actualización conserva los JSON existentes. Si la interfaz solo muestra el
+estacionamiento de ejemplo, utilizar la [recuperación explícita del catálogo](RECUPERAR_CATALOGO.md).
+Incluye diagnóstico sin escrituras, respaldo y sustitución atómica, más una
+ampliación separada de autorizaciones que conserva IMAP y las contraseñas.
