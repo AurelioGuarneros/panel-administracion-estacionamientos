@@ -10,16 +10,19 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13.9'
           architecture: x64
       - name: Instalar compilador
         shell: pwsh
         run: |
-          choco install innosetup --version=6.4.3 --yes --no-progress --allow-downgrade
-          if ($LASTEXITCODE -ne 0) { throw 'No se pudo instalar Inno Setup' }
+          $archivo = Join-Path $env:RUNNER_TEMP 'innosetup-6.4.3.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_4_3/innosetup-6.4.3.exe' -OutFile $archivo
+          if ((Get-FileHash $archivo -Algorithm SHA256).Hash -ne 'f3c42116542c4cc57263c5ba6c4feabfc49fe771f2f98a79d2f7628b8762723b') { throw 'SHA256 de Inno Setup incorrecto' }
+          $proceso = Start-Process $archivo -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS' -Wait -PassThru
+          if ($proceso.ExitCode -ne 0) { throw 'No se pudo instalar Inno Setup' }
       - name: Compilar y ejecutar pruebas automatizadas
         shell: pwsh
         run: ./deployment/windows/compilar.ps1
@@ -27,7 +30,7 @@ jobs:
         shell: pwsh
         run: ./deployment/windows/verificar_instalador.ps1
       - name: Publicar instaladores de prueba
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: instaladores-windows-prueba-x64
           path: dist/instaladores/
@@ -35,7 +38,7 @@ jobs:
           retention-days: 30
       - name: Guardar diagnóstico de compilación
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: diagnostico-windows
           path: |
