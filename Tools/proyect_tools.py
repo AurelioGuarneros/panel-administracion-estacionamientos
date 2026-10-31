@@ -107,11 +107,19 @@ class Tools:
 
         :raises FileNotFoundError: Cuando el archivo no se puede abrir.
         """
+        import sys
         json_path = r'Config/config_files/path_files_settings.json'
+        if getattr(sys, 'frozen', False):
+            from Tools.entorno_windows import datos_usuario
+            json_path = str(datos_usuario() / json_path)
         try:
             with open(json_path, encoding='utf-8') as f:
                 data = json.load(f)
-                return data['path_files'][0][type_file][0][file_path]
+                valor = data['path_files'][0][type_file][0][file_path]
+                if getattr(sys, 'frozen', False):
+                    from Tools.entorno_windows import resolver
+                    return resolver(type_file, valor)
+                return valor
 
         except FileNotFoundError:
             print(f'El archivo "{json_path}" no se pudo abrir.')

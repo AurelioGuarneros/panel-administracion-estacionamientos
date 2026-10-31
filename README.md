@@ -116,3 +116,7 @@ La actualización conserva los JSON existentes. Si la interfaz solo muestra el
 estacionamiento de ejemplo, utilizar la [recuperación explícita del catálogo](RECUPERAR_CATALOGO.md).
 Incluye diagnóstico sin escrituras, respaldo y sustitución atómica, más una
 ampliación separada de autorizaciones que conserva IMAP y las contraseñas.
+
+## Windows: instaladores autónomos de prueba
+
+Consulta [INSTALACION_WINDOWS.md](INSTALACION_WINDOWS.md) para descargar, instalar, conservar datos y compilar los paquetes de usuarios y desarrollo mediante GitHub Actions. Resultados: [PRUEBAS_INSTALADORES_WINDOWS.md](PRUEBAS_INSTALADORES_WINDOWS.md).

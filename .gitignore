@@ -61,3 +61,6 @@ dist/
 # Perfil privado de recuperación
 **/recuperacion.json
 **/importador_temporal.cnf
+
+# Especificación versionada del paquete Windows
+!deployment/windows/panel.spec

@@ -7,3 +7,5 @@ openpyxl
 pycryptodome
 python-dateutil
 requests
+
+pywin32; sys_platform == "win32"

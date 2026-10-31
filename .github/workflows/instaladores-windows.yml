@@ -1,0 +1,45 @@
+name: Instaladores Windows de prueba
+on:
+  push:
+    branches: ['desarrollo/instaladores-windows']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compilar:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13.9'
+          architecture: x64
+      - name: Instalar compilador
+        shell: pwsh
+        run: |
+          choco install innosetup --version=6.4.3 --yes --no-progress --allow-downgrade
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo instalar Inno Setup' }
+      - name: Compilar y ejecutar pruebas automatizadas
+        shell: pwsh
+        run: ./deployment/windows/compilar.ps1
+      - name: Verificar ejecutable e instalación
+        shell: pwsh
+        run: ./deployment/windows/verificar_instalador.ps1
+      - name: Publicar instaladores de prueba
+        uses: actions/upload-artifact@v4
+        with:
+          name: instaladores-windows-prueba-x64
+          path: dist/instaladores/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Guardar diagnóstico de compilación
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostico-windows
+          path: |
+            build/PanelEstacionamientos/warn-*.txt
+            instalacion-prueba.log
+            dist/instaladores/prueba-windows.json
+          if-no-files-found: ignore

@@ -247,13 +247,16 @@ class PerfilTests(unittest.TestCase):
             antes=catalogo.read_bytes();destino=raiz/'privado/recuperacion.json'
             configurar(raiz,destino,entrada=Mock(side_effect=['correo.example.invalid','','receptor@example.invalid','','']),clave=Mock(return_value='ficticia'))
             self.assertEqual(antes,catalogo.read_bytes())
-            self.assertEqual(destino.stat().st_mode & 0o777,0o600)
+            import os
+            if os.name != 'nt':
+                self.assertEqual(destino.stat().st_mode & 0o777,0o600)
             self.assertEqual(leer_perfil(destino)['imap']['host'],'correo.example.invalid')
             datos=destino.read_bytes()
             with self.assertRaises(FileExistsError): configurar(raiz,destino)
             self.assertEqual(datos,destino.read_bytes())
 
 
+@unittest.skipIf(__import__('os').name == 'nt', 'Despliegue Trixie específico de Linux (pwd/sudo).')
 class PreparacionTrixieTests(unittest.TestCase):
     def cargar(self):
         import runpy

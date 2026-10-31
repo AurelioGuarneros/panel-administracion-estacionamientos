@@ -30,7 +30,11 @@ def resolver_registro(datos, nombre):
 class EstacionamientosConfig:
     def __init__(self, ruta, permiso=None):
         self.permiso = permiso
+        import sys
         self.raiz = Path(__file__).resolve().parents[1]
+        if getattr(sys, 'frozen', False):
+            from Tools.entorno_windows import datos_usuario
+            self.raiz = datos_usuario().resolve()
         self.ruta = Path(ruta).resolve()
         if self.raiz not in self.ruta.parents:
             raise ErrorValidacion('La configuración debe estar dentro de integración.')
