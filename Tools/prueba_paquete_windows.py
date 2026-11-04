@@ -16,9 +16,10 @@ def ejecutar(informe):
     import tkinter as tk
     from ttkthemes import ThemedStyle
     from tkcalendar import DateEntry
+    from tkinter import messagebox
     import win32com.client
     with tempfile.TemporaryDirectory(prefix='panel-smoke-') as temporal:
-        with patch.dict(os.environ, LOCALAPPDATA=temporal), patch.object(socket.socket, 'connect', side_effect=AssertionError('No conectar red')):
+        with patch.dict(os.environ, LOCALAPPDATA=temporal), patch.object(socket.socket, 'connect', side_effect=AssertionError('No conectar red')), patch.object(messagebox, 'showerror', side_effect=AssertionError('Error gráfico durante la prueba')):
             destino = datos_usuario()
             preparar(destino, lambda texto: 'clave-ficticia-prueba')
             originales = {p.name: p.read_bytes() for p in (destino / 'Config/config_files').glob('*.json')}
@@ -45,8 +46,19 @@ def ejecutar(informe):
                 login = ControllerLogin()
                 with patch.object(tk.Misc, 'mainloop', lambda self, *args: None):
                     login.get_data('Aurelio', 'clave-ficticia-prueba')
+                errores_tk = []
+                vista.window_login.report_callback_exception = lambda *args: errores_tk.append(args[0].__name__)
                 vista.window_login.update()
+                assert not errores_tk, 'Error en callback de Tk'
                 assert len([w for w in vista.window_login.winfo_children() if isinstance(w, tk.Toplevel)]) >= 1
+                ventanas = []
+                def buscar(widget):
+                    for hijo in widget.winfo_children():
+                        if isinstance(hijo, tk.Toplevel):
+                            ventanas.append(hijo.title())
+                        buscar(hijo)
+                buscar(vista.window_login)
+                assert 'Administrar estacionamientos' in ventanas
                 vista.window_login.destroy()
             finally:
                 os.chdir(cwd)

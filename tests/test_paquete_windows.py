@@ -69,3 +69,22 @@ class PaqueteWindowsTests(unittest.TestCase):
             modelo = EstacionamientosConfig(datos_usuario() / 'Config/config_files/database_connection_configuration.json', 'admin')
             modelo.cambiar_estado('Aguascalientes 143', False)
             self.assertEqual(len(modelo.activos()), 11)
+
+    def test_registro_sqlite_cierra_conexion_y_confirma_transaccion(self):
+        import sqlite3
+        from actualizador_respaldos import ActualizadorRespaldos
+        servicio = ActualizadorRespaldos.__new__(ActualizadorRespaldos)
+        servicio.archivo_estado = self.raiz / 'registro.sqlite3'
+        with servicio.conectar_registro() as conexion:
+            conexion.execute('CREATE TABLE prueba (valor TEXT)')
+            conexion.execute("INSERT INTO prueba VALUES ('ficticio')")
+        with self.assertRaises(sqlite3.ProgrammingError):
+            conexion.execute('SELECT 1')
+        with servicio.conectar_registro() as conexion:
+            self.assertEqual(conexion.execute('SELECT valor FROM prueba').fetchone()[0], 'ficticio')
+        with self.assertRaises(ValueError):
+            with servicio.conectar_registro() as conexion:
+                conexion.execute("INSERT INTO prueba VALUES ('revertir')")
+                raise ValueError('Fallo ficticio')
+        with servicio.conectar_registro() as conexion:
+            self.assertEqual(conexion.execute('SELECT COUNT(*) FROM prueba').fetchone()[0], 1)

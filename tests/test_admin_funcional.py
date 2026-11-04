@@ -104,8 +104,8 @@ class FuncionalTests(unittest.TestCase):
     def test_fallo_de_escritura_no_trunca_y_muestra_causa_sin_secretos(self):
         self.valores()
         original = self.ruta.read_bytes()
-        with patch('Models.estacionamientos_config.os.replace',
-                   side_effect=OSError(errno.ENOSPC, 'SECRETO_FICTICIO')), \
+        with patch.object(self.vista.modelo, '_guardar',
+                          side_effect=OSError(errno.ENOSPC, 'SECRETO_FICTICIO')), \
                 patch('Views.view_admin_estacionamientos.messagebox.showerror') as error:
             self.vista.editar()
         mensaje = error.call_args.args[1]

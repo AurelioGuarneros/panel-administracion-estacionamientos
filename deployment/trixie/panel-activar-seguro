@@ -15,7 +15,7 @@ def ident(x):
     if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', x): raise RuntimeError('Nombre inválido')
     return '`'+x+'`'
 
-def check(cur, schema):
+def check(cur, schema, permitir_vistas=False):
     cur.execute('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s AND TABLE_TYPE=%s',(schema,'BASE TABLE'))
     names={x[0] for x in cur.fetchall()} - {MARCA}
     if not set(TABLES).issubset(names) or names - (set(TABLES) | set(OPTIONAL)):
@@ -29,7 +29,7 @@ def check(cur, schema):
     cur.execute('SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=%s',(schema,))
     if cur.fetchone()[0]: raise RuntimeError('No se admiten triggers')
     cur.execute('SELECT COUNT(*) FROM information_schema.VIEWS WHERE TABLE_SCHEMA=%s',(schema,))
-    if cur.fetchone()[0]: raise RuntimeError('No se admiten vistas en el respaldo')
+    if cur.fetchone()[0] and not permitir_vistas: raise RuntimeError('No se admiten vistas en el respaldo')
     cur.execute('SELECT CONSTRAINT_NAME,TABLE_NAME,COLUMN_NAME,REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=%s AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY CONSTRAINT_NAME,ORDINAL_POSITION',(schema,))
     grupos={}
     for restriccion,tabla,columna,principal,col_principal in cur.fetchall():
@@ -81,14 +81,14 @@ def main():
                 c.execute(f'SELECT sha256 FROM {ident(base)}.{ident(MARCA)}')
                 fila=c.fetchone()
                 if fila and fila[0]==sha:
-                    check(c,base)
+                    check(c,base,permitir_vistas=True)
                     escribir_recibo(base,sha)
                     print('YA_ACTIVADA',base)
                     return
             prepared=check(c,stage)
             c.execute('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME=%s',(base,))
             exists=c.fetchone() is not None
-            live=check(c,base) if exists else None
+            live=check(c,base,permitir_vistas=True) if exists else None
             if live:
                 if set(live) - set(prepared):
                     raise RuntimeError('Respaldo no incluye tablas de la base actual: '+str(sorted(set(live)-set(prepared))))
@@ -131,7 +131,7 @@ def main():
             c.execute(f"GRANT SELECT, SHOW VIEW ON `{base_grant}`.* TO '{lector}'@'localhost'")
             c.execute('RENAME TABLE '+', '.join(moves))
             try:
-                verified=check(c,base)
+                verified=check(c,base,permitir_vistas=True)
                 if verified!=prepared: raise RuntimeError('La validación posterior no coincide')
             except Exception:
                 reversa=[f'{ident(base)}.{ident(t)} TO {ident(stage)}.{ident(t)}' for t in tablas_nuevas]
@@ -147,4 +147,4 @@ def main():
 if __name__=='__main__':
     try: main()
     except Exception as e:
-        print('ERROR: activación rechazada; revisar permisos, integridad o resguardos locales.',file=sys.stderr);sys.exit(1)
+        print('ERROR: '+str(e),file=sys.stderr);sys.exit(1)

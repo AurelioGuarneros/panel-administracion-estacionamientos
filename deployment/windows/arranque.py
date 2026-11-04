@@ -103,4 +103,7 @@ if __name__ == '__main__':
             raise SystemExit(iniciar())
     except Exception:
         registrar(*sys.exc_info())
-        raise
+        if '--smoke-test' not in sys.argv:
+            from tkinter import messagebox
+            messagebox.showerror('Panel de Estacionamientos', 'No se pudo iniciar el panel. Consulta la carpeta de datos y registros desde el menú Inicio.')
+        raise SystemExit(1)

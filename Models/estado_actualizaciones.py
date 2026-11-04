@@ -34,6 +34,10 @@ class EstadoActualizaciones:
         self.catalogo = catalogo
         self.ruta = Path(ruta_sqlite) if ruta_sqlite is not None else (
             Path.home() / '.local/share/panel-estacionamientos/actualizaciones.sqlite3')
+        import sys
+        if ruta_sqlite is None and getattr(sys, 'frozen', False):
+            from Tools.entorno_windows import datos_usuario
+            self.ruta = datos_usuario() / 'estado/actualizaciones.sqlite3'
         try:
             self.zona = ZoneInfo('America/Mexico_City')
             self.nombre_zona = 'America/Mexico_City'

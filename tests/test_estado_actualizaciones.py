@@ -1,3 +1,4 @@
+from contextlib import closing
 """Datos totalmente ficticios. Solo se escribe al construir las bases de prueba."""
 import hashlib
 import json
@@ -32,7 +33,7 @@ class EstadoTests(unittest.TestCase):
         self.carga = self.check + 3600
 
     def crear(self, checks=(), imports=(), comprobaciones=True, importaciones=True):
-        with sqlite3.connect(self.sqlite) as c:
+        with closing(sqlite3.connect(self.sqlite)) as c, c:
             if comprobaciones:
                 c.execute('CREATE TABLE actualizaciones (estacionamiento TEXT PRIMARY KEY, ultimo_respaldo TEXT, ultima_comprobacion REAL, estado TEXT)')
                 c.executemany('INSERT INTO actualizaciones VALUES (?, ?, ?, ?)', checks)
@@ -80,7 +81,7 @@ class EstadoTests(unittest.TestCase):
     def test_faltan_tablas_no_se_crean(self):
         self.crear(comprobaciones=False, importaciones=False)
         self.assertEqual(len(self.modelo.listar()['avisos']), 2)
-        with sqlite3.connect(self.sqlite) as c:
+        with closing(sqlite3.connect(self.sqlite)) as c, c:
             self.assertEqual(c.execute('SELECT name FROM sqlite_master').fetchall(), [])
 
     def test_tabla_de_importaciones_ausente_no_oculta_comprobacion(self):
@@ -95,7 +96,7 @@ class EstadoTests(unittest.TestCase):
         self.assertEqual(self.sqlite.read_bytes(), antes)
 
     def test_esquema_incompatible_no_se_modifica(self):
-        with sqlite3.connect(self.sqlite) as c:
+        with closing(sqlite3.connect(self.sqlite)) as c, c:
             c.execute('CREATE TABLE actualizaciones (otro TEXT)')
         antes = self.sqlite.read_bytes()
         self.assertTrue(self.modelo.listar()['avisos'])
@@ -155,7 +156,7 @@ class EstadoTests(unittest.TestCase):
     def test_fechas_invalidas_nunca_se_sustituyen_por_hora_actual(self):
         self.crear()
         for fecha in (None, 0, -1, float('inf'), 'fecha desconocida', time.time()+100000):
-            with sqlite3.connect(self.sqlite) as c:
+            with closing(sqlite3.connect(self.sqlite)) as c, c:
                 c.execute('DELETE FROM importaciones')
                 c.execute('INSERT INTO importaciones VALUES (?, ?, ?, ?)',
                           ('Ejemplo ficticio', 'uid', fecha, 'ficticio.zip'))

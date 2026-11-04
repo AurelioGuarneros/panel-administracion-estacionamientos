@@ -51,6 +51,11 @@ class ActualizadorRespaldos:
             / "panel-estacionamientos"
         )
 
+        import sys
+        if getattr(sys, 'frozen', False):
+            from Tools.entorno_windows import datos_usuario
+            self.directorio = datos_usuario() / 'estado'
+
         if directorio is not None:
             self.directorio = Path(directorio)
 
@@ -65,8 +70,14 @@ class ActualizadorRespaldos:
 
         self.inicializar_registro()
 
+    @contextlib.contextmanager
     def conectar_registro(self):
-        return sqlite3.connect(self.archivo_estado)
+        conexion = sqlite3.connect(self.archivo_estado)
+        try:
+            with conexion:
+                yield conexion
+        finally:
+            conexion.close()
 
     def inicializar_registro(self):
         with self.conectar_registro() as conexion:

@@ -112,8 +112,67 @@ class ViewEstadoActualizaciones:
             return
         self.window.destroy()
 
+    def solicitar_clave_correo(self):
+        from tkinter import simpledialog
+        import json
+        import os
+        import tempfile
+        from pathlib import Path
+
+        carpeta = Path.home() / ".config/panel-estacionamientos"
+        activo = carpeta / "recuperacion.json"
+        anterior = carpeta / "recuperacion.json.respaldo"
+
+        origen = activo if activo.exists() else anterior
+        if not origen.exists():
+            messagebox.showerror(
+                "Correo",
+                "Falta configurar el perfil de recuperación.",
+                parent=self.window
+            )
+            return False
+
+        perfil = json.loads(origen.read_text(encoding="utf-8"))
+        if perfil.get("imap", {}).get("password") and activo.exists():
+            return True
+
+        clave = simpledialog.askstring(
+            "Correo de respaldos",
+            "Introduce la contraseña del correo:",
+            show="*",
+            parent=self.window
+        )
+        if not clave:
+            return False
+
+        perfil["imap"]["password"] = clave
+        perfil["imap"]["host"] = "mailc76.carrierzone.com"
+
+        # Mantener inactivo el perfil anterior hasta preparar MariaDB.
+        destino = activo if activo.exists() else anterior
+        fd, temporal = tempfile.mkstemp(dir=carpeta)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as archivo:
+                json.dump(perfil, archivo, ensure_ascii=False, indent=2)
+            os.chmod(temporal, 0o600)
+            os.replace(temporal, destino)
+        finally:
+            if os.path.exists(temporal):
+                os.unlink(temporal)
+
+        if destino == anterior:
+            messagebox.showinfo(
+                "Correo",
+                "Contraseña guardada. Falta habilitar la importación "
+                "automática antes de actualizar.",
+                parent=self.window
+            )
+            return False
+        return True
+
     def actualizar(self, importar, todos):
         if self.ocupado: return
+        if not self.solicitar_clave_correo(): return
         seleccion = self.tabla.selection()
         nombre = None if todos else (self.registros[int(seleccion[0])]['nombre'] if seleccion else None)
         if not todos and not nombre: return

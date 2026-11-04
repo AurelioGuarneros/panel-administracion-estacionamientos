@@ -1,4 +1,4 @@
-[Setup]
+﻿[Setup]
 AppId={{646B0B36-5ECC-4D16-9088-AEF0081DDCEB}
 AppName=Herramientas de desarrollo del Panel (prueba)
 AppVersion=2026.10.30.1

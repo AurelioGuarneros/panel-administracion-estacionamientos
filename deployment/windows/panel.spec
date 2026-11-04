@@ -9,7 +9,7 @@ for nombre in ('path_files_settings', 'user_settings', 'database_connection_conf
 for nombre in ('logo_pase.jpg', 'icono_desconectar.png', 'icono_salir.png', 'icono_borrar.png', 'icono_calendario.png'):
     datos.append((str(raiz / 'Public/Images' / nombre), 'Public/Images'))
 binarios, ocultos = [], ['babel.numbers', 'win32com.client', 'pythoncom', 'pywintypes']
-for paquete in ('ttkthemes', 'tkcalendar', 'Crypto', 'babel'):
+for paquete in ('ttkthemes', 'tkcalendar', 'Crypto', 'babel', 'tzdata'):
     d, b, h = collect_all(paquete)
     datos += d
     binarios += b

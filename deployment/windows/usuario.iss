@@ -1,4 +1,4 @@
-#define AppVersion "2026.10.30.1"
+﻿#define AppVersion "2026.10.30.1"
 [Setup]
 AppId={{B90698E9-7720-4EA6-9852-154697F99858}
 AppName=Panel de Administración de Estacionamientos (prueba)
