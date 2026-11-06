@@ -176,6 +176,42 @@ class EstacionamientosConfig:
         datos['settings'].append(nuevo)
         self._guardar(datos)
 
+    def listar_retirados(self):
+        """Identidades reservadas, sin credenciales."""
+        return copy.deepcopy(self._leer().get('estacionamientos_eliminados', []))
+
+    def reincorporar(self, nombre_retirado, email, plantilla, ubicacion=''):
+        """Reincorpora una identidad histórica usando una conexión plantilla local.
+
+        No descarga, importa ni certifica una base; requiere autorización posterior.
+        """
+        exigir_admin(self.permiso)
+        datos = self._leer()
+        retirados = datos.get('estacionamientos_eliminados', [])
+        coincidencias = [r for r in retirados if r['name_config'] == nombre_retirado]
+        if len(coincidencias) != 1:
+            raise ErrorValidacion('Selecciona un estacionamiento retirado válido.')
+        identidad = coincidencias[0]
+        if not plantilla:
+            raise ErrorValidacion('Selecciona una plantilla de conexión local.')
+        origen = self._buscar(datos, plantilla)
+        if not all(k in origen for k in ('host', 'user', 'password', 'iv')):
+            raise ErrorValidacion('La plantilla no contiene todos los campos de conexión.')
+        datos_sin_retirado = dict(datos, estacionamientos_eliminados=[r for r in retirados if r is not identidad])
+        campos = self._campos(datos_sin_retirado, identidad['name_config'], email, identidad['database'])
+        nuevo = copy.deepcopy(origen)
+        for k in ('id', 'nombres_anteriores', 'clave_respaldo', 'ubicacion', 'actualizacion_automatica', 'configuracion_verificada'):
+            nuevo.pop(k, None)
+        nuevo.update(copy.deepcopy(identidad))
+        nuevo.update(campos, activo=True, ubicacion=self._ubicacion(ubicacion),
+                     actualizacion_automatica=False, configuracion_verificada=False)
+        nuevo.setdefault('id', str(uuid.uuid4()))
+        datos['settings'].append(nuevo)
+        retirados.remove(identidad)
+        from Tools.catalogo_inicial import validar_local
+        validar_local(datos)
+        self._guardar(datos)
+
     def editar(self, original, nombre, email, database, ubicacion=None):
         exigir_admin(self.permiso)
         datos = self._leer()
