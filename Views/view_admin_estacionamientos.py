@@ -53,7 +53,7 @@ class ViewAdminEstacionamientos:
         ayuda = ttk.Label(self.window, text='Las altas quedan pendientes de verificación, con actualización automática deshabilitada. El remitente debe ser exclusivo, incluso entre inactivos. El correo central receptor se configura por separado.', wraplength=ancho - 24)
         ayuda.grid(row=6, column=0, columnspan=3, pady=4, sticky='ew')
         self.window.bind('<Configure>', lambda event: ayuda.configure(wraplength=max(100, event.width - 24)) if event.widget == self.window else None)
-        for columna, (titulo, accion) in enumerate((('Agregar con plantilla', self.agregar), ('Guardar edición', self.editar), ('Activar / desactivar', self.cambiar_estado), ('Eliminar definitivamente del catálogo…', self.eliminar))):
+        for columna, (titulo, accion) in enumerate((('Agregar con plantilla', self.agregar), ('Reincorporar retirado…', self.reincorporar), ('Guardar edición', self.editar), ('Activar / desactivar', self.cambiar_estado), ('Eliminar definitivamente del catálogo…', self.eliminar))):
             ttk.Button(self.window, text=titulo, command=accion).grid(row=7 + columna, column=0, columnspan=3, sticky='ew', padx=6, pady=2)
         self.recargar(registros)
 
@@ -108,6 +108,39 @@ class ViewAdminEstacionamientos:
 
     def agregar(self):
         self.ejecutar(lambda: self.modelo.agregar(*self.valores(), plantilla=self.plantilla.get(), ubicacion=self.campos['ubicacion'].get()))
+
+    def reincorporar(self):
+        retirados = self.modelo.listar_retirados()
+        if not retirados:
+            messagebox.showinfo('Reincorporar', 'No hay estacionamientos retirados.', parent=self.window)
+            return
+        nombres = [r['name_config'] for r in retirados]
+        nombre = simpledialog.askstring(
+            'Reincorporar estacionamiento',
+            'Escribe exactamente el nombre del estacionamiento retirado:\n' + '\n'.join(nombres),
+            parent=self.window)
+        if nombre is None:
+            return
+        if nombre not in nombres:
+            messagebox.showerror('Reincorporar', 'Selecciona un nombre de la lista.', parent=self.window)
+            return
+        correo = simpledialog.askstring('Correo remitente',
+                                        'Correo desde el que se envían los respaldos:',
+                                        parent=self.window)
+        if correo is None:
+            return
+        plantilla = self.plantilla.get()
+        if not plantilla:
+            messagebox.showerror('Reincorporar',
+                                 'Selecciona primero una plantilla de conexión en la pantalla.',
+                                 parent=self.window)
+            return
+        if not messagebox.askyesno('Confirmar reincorporación',
+                                   f'¿Reincorporar {nombre} con el remitente indicado?\n'
+                                   'Quedará pendiente de autorizar, descargar e importar el respaldo.\n'
+                                   'No se modificará ninguna base de datos.', parent=self.window):
+            return
+        self.ejecutar(lambda: self.modelo.reincorporar(nombre, correo, plantilla))
 
     def editar(self):
         self.ejecutar(lambda: self.modelo.editar(self.seleccionado()['name_config'], *self.valores(), ubicacion=self.campos['ubicacion'].get()))
