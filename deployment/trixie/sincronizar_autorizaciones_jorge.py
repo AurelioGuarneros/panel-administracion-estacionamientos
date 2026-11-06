@@ -5,7 +5,6 @@ Solo acepta la discrepancia diagnosticada en noviembre de 2026. Por defecto
 hace un diagnóstico sin escrituras. --aplicar requiere confirmación explícita.
 """
 import argparse
-import copy
 import json
 import os
 from pathlib import Path
@@ -18,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import pymysql
 from Models.configuracion_respaldos import leer_perfil, conexion_local
 from Tools.asociaciones_recuperacion import reglas_sudoers
-from Tools.archivos_configuracion import guardar_con_respaldo
+from deployment.trixie.actualizar_autorizaciones import aplicar_cambios
 from deployment.trixie.actualizar_autorizaciones import RUTAS, archivo_root
 from deployment.trixie.preparar_sistema import comprobar, verificar_grants, conceder_permisos
 
@@ -83,18 +82,15 @@ def ejecutar(usuario, ruta, aplicar=False):
         raise ValueError('No existe el bloqueo seguro del actualizador.')
     with bloqueo(lock):
         preparar(usuario, ruta)  # Revalidar estado antes de escribir.
-        # Validar grants existentes admitiendo temporalmente los esquemas retirados.
-        anterior = copy.deepcopy(perfil)
-        anterior['estaciones'] += [
-            {'database': b} for b in sorted(RETIRAR)
-        ]
+        # Exigir permisos completos solo en las estaciones vigentes.
+        # Admitir temporalmente las autorizaciones retiradas sin exigir que estén completas.
         conexion = pymysql.connect(
             unix_socket=perfil['mariadb']['socket'],
             user='root', autocommit=True, local_infile=False)
         try:
             with conexion.cursor() as cursor:
                 comprobar(cursor)
-                verificar_grants(cursor, anterior, adicionales=AGREGAR)
+                verificar_grants(cursor, perfil, adicionales=AGREGAR | RETIRAR)
                 for rol in ('importador', 'lector'):
                     prueba = pymysql.connect(**conexion_local(perfil, rol))
                     prueba.close()
@@ -113,12 +109,13 @@ def ejecutar(usuario, ruta, aplicar=False):
                 verificar_grants(cursor, perfil)
             # Escribir configuración instalada con respaldos privados.
             # No cambiar el perfil: ya tiene Ciudad Mendoza.
-            respaldo_bases = guardar_con_respaldo(
-                RUTAS['bases'], ('\n'.join(bases) + '\n').encode(), archivos['bases'])
-            respaldo_sudoers = guardar_con_respaldo(
-                RUTAS['sudoers'], nuevas, archivos['sudoers'])
+            cambios = [
+                (RUTAS['bases'], archivos['bases'], ('\\n'.join(bases) + '\\n').encode()),
+                (RUTAS['sudoers'], archivos['sudoers'], nuevas),
+            ]
+            respaldos = aplicar_cambios(cambios)
             print('Autorizaciones sincronizadas. Perfil IMAP y contraseñas intactos.')
-            print('Respaldos creados:', respaldo_bases, respaldo_sudoers)
+            print('Respaldos privados creados:', len(respaldos))
             print('No se eliminaron ni importaron bases de datos.')
         finally:
             conexion.close()
