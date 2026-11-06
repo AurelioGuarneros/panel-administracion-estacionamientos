@@ -103,14 +103,14 @@ def ejecutar(usuario, ruta, aplicar=False):
                     stage = ('panel_stage_' + base).replace('_', r'\_')
                     lector = base.replace('_', r'\_')
                     cursor.execute(
-                        f"REVOKE CREATE, DROP, INSERT, SELECT, ALTER, INDEX, REFERENCES ON `{stage}`.* FROM '{imp}'@'localhost'")
+                        f"REVOKE ALL PRIVILEGES ON `{stage}`.* FROM '{imp}'@'localhost'")
                     cursor.execute(
-                        f"REVOKE SELECT, SHOW VIEW ON `{lector}`.* FROM '{lect}'@'localhost'")
+                        f"REVOKE ALL PRIVILEGES ON `{lector}`.* FROM '{lect}'@'localhost'")
                 verificar_grants(cursor, perfil)
             # Escribir configuración instalada con respaldos privados.
             # No cambiar el perfil: ya tiene Ciudad Mendoza.
             cambios = [
-                (RUTAS['bases'], archivos['bases'], ('\\n'.join(bases) + '\\n').encode()),
+                (RUTAS['bases'], archivos['bases'], ('\n'.join(bases) + '\n').encode()),
                 (RUTAS['sudoers'], archivos['sudoers'], nuevas),
             ]
             respaldos = aplicar_cambios(cambios)
