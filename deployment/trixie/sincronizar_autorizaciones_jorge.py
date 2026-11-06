@@ -5,6 +5,7 @@ Solo acepta la discrepancia diagnosticada en noviembre de 2026. Por defecto
 hace un diagnóstico sin escrituras. --aplicar requiere confirmación explícita.
 """
 import argparse
+import copy
 import json
 import os
 from pathlib import Path
@@ -90,7 +91,11 @@ def ejecutar(usuario, ruta, aplicar=False):
         try:
             with conexion.cursor() as cursor:
                 comprobar(cursor)
-                verificar_grants(cursor, perfil, adicionales=AGREGAR | RETIRAR)
+                existentes = copy.deepcopy(perfil)
+                existentes['estaciones'] = [
+                    e for e in perfil['estaciones'] if e['database'] not in AGREGAR
+                ]
+                verificar_grants(cursor, existentes, adicionales=AGREGAR | RETIRAR)
                 for rol in ('importador', 'lector'):
                     prueba = pymysql.connect(**conexion_local(perfil, rol))
                     prueba.close()
