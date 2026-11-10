@@ -142,9 +142,9 @@ def verificar_integridad(conexion, base):
                              and tabla == 'MovsUsuarios' and principal == 'Usuarios'
                              and columnas == [('Idusuario', 'Id_usuario')])
                 if excepcion:
-                    cursor.execute(f"""SELECT h.Idusuario, COUNT(*) FROM \`{base}\`.\`MovsUsuarios\` h
+                    cursor.execute(f"""SELECT h.Idusuario, COUNT(*) FROM `{base}`.`MovsUsuarios` h
                         WHERE h.Idusuario IS NOT NULL AND NOT EXISTS
-                        (SELECT 1 FROM \`{base}\`.\`Usuarios\` p WHERE h.Idusuario=p.Id_usuario)
+                        (SELECT 1 FROM `{base}`.`Usuarios` p WHERE h.Idusuario=p.Id_usuario)
                         GROUP BY h.Idusuario ORDER BY h.Idusuario""")
                     excepcion = cursor.fetchall() == ((13, 32), (14, 12))
                 if not excepcion:
