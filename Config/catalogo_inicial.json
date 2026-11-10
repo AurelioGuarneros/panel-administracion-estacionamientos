@@ -9,13 +9,6 @@
       "activo": true
     },
     {
-      "name_config": "Amores 1003",
-      "database": "db_amores_1003",
-      "email": "amores1003@pasesa.com.mx",
-      "id": "db_amores_1003",
-      "activo": true
-    },
-    {
       "name_config": "Durango 205",
       "database": "db_durango_205",
       "email": "durango205@pasesa.com.mx",
@@ -84,13 +77,20 @@
       "email": "hidalgo401.pv@pasesa.com.mx",
       "id": "db_PUNTO_SANTA_ROSA_PV",
       "activo": true
+    },
+    {
+      "name_config": "Ciudad Mendoza",
+      "database": "db_ciudad_mendoza",
+      "email": "hidalgo401@pasesa.com.mx",
+      "id": "db_ciudad_mendoza",
+      "activo": true
     }
   ],
   "estacionamientos_eliminados": [
     {
-      "name_config": "Ciudad Mendoza",
-      "database": "db_ciudad_mendoza",
-      "id": "db_ciudad_mendoza"
+      "name_config": "Amores 1003",
+      "database": "db_amores_1003",
+      "id": "db_amores_1003"
     }
   ]
 }
