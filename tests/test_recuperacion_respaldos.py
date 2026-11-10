@@ -194,7 +194,7 @@ class RecuperacionTests(unittest.TestCase):
         def iniciar(*args,**kwargs):
             kwargs['target']()
             return Mock()
-        with patch('threading.Thread',side_effect=iniciar), patch('actualizador_respaldos.ActualizadorRespaldos') as servicio:
+        with patch.object(vista, 'solicitar_clave_correo', return_value=True), patch('threading.Thread',side_effect=iniciar), patch('actualizador_respaldos.ActualizadorRespaldos') as servicio:
             servicio.return_value.ejecutar_todos.return_value=[('PV ficticio','Disponible')]
             vista.actualizar(True,True)
         self.assertEqual(vista.cola.get_nowait(),'PV ficticio: Disponible')
