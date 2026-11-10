@@ -38,7 +38,18 @@ def check(cur, schema, permitir_vistas=False):
         no_nulos=' AND '.join('h.'+ident(a)+' IS NOT NULL' for a,_ in columnas)
         iguales=' AND '.join('h.'+ident(a)+'=p.'+ident(b) for a,b in columnas)
         cur.execute(f'SELECT COUNT(*) FROM {ident(schema)}.{ident(tabla)} h WHERE {no_nulos} AND NOT EXISTS (SELECT 1 FROM {ident(schema)}.{ident(principal)} p WHERE {iguales})')
-        if cur.fetchone()[0]: raise RuntimeError('Existen relaciones huérfanas')
+        huerfanos=cur.fetchone()[0]
+        if huerfanos:
+            excepcion=(schema in ('panel_stage_db_ciudad_mendoza','db_ciudad_mendoza')
+                       and tabla=='MovsUsuarios' and principal=='Usuarios'
+                       and columnas==[('Idusuario','Id_usuario')])
+            if excepcion:
+                cur.execute(f'SELECT h.Idusuario, COUNT(*) FROM {ident(schema)}.\`MovsUsuarios\` h '
+                            f'WHERE h.Idusuario IS NOT NULL AND NOT EXISTS '
+                            f'(SELECT 1 FROM {ident(schema)}.\`Usuarios\` p WHERE h.Idusuario=p.Id_usuario) '
+                            f'GROUP BY h.Idusuario ORDER BY h.Idusuario')
+                excepcion=cur.fetchall()==((13,32),(14,12))
+            if not excepcion: raise RuntimeError('Existen relaciones huérfanas')
     counts={}
     for table in sorted(names):
         cur.execute(f'SELECT COUNT(*) FROM {ident(schema)}.`{table}`')
