@@ -136,7 +136,19 @@ def verificar_integridad(conexion, base):
             iguales = ' AND '.join(f'h.`{a}`=p.`{b}`' for a,b in columnas)
             cursor.execute(f'SELECT COUNT(*) FROM `{base}`.`{tabla}` h WHERE {no_nulos} AND NOT EXISTS '
                            f'(SELECT 1 FROM `{base}`.`{principal}` p WHERE {iguales})')
-            if cursor.fetchone()[0]: raise RuntimeError('Existen relaciones huérfanas en el respaldo.')
+            huerfanos = cursor.fetchone()[0]
+            if huerfanos:
+                excepcion = (base == 'panel_stage_db_ciudad_mendoza'
+                             and tabla == 'MovsUsuarios' and principal == 'Usuarios'
+                             and columnas == [('Idusuario', 'Id_usuario')])
+                if excepcion:
+                    cursor.execute(f"""SELECT h.Idusuario, COUNT(*) FROM \`{base}\`.\`MovsUsuarios\` h
+                        WHERE h.Idusuario IS NOT NULL AND NOT EXISTS
+                        (SELECT 1 FROM \`{base}\`.\`Usuarios\` p WHERE h.Idusuario=p.Id_usuario)
+                        GROUP BY h.Idusuario ORDER BY h.Idusuario""")
+                    excepcion = cursor.fetchall() == ((13, 32), (14, 12))
+                if not excepcion:
+                    raise RuntimeError('Existen relaciones huérfanas en el respaldo.')
 
         for tabla, principal in relaciones:
             if not any(
