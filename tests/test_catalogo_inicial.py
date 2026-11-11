@@ -22,8 +22,9 @@ class CatalogoInicialTests(unittest.TestCase):
     def test_publico_estricto_y_retirados(self):
         validar_catalogo(self.catalogo)
         self.assertEqual(len(self.catalogo['settings']), 12)
-        self.assertEqual([r['name_config'] for r in self.catalogo['estacionamientos_eliminados']], ['Ciudad Mendoza'])
-        self.assertNotIn('Ciudad Mendoza', [r['name_config'] for r in self.catalogo['settings']])
+        self.assertEqual([r['name_config'] for r in self.catalogo['estacionamientos_eliminados']], ['Amores 1003'])
+        self.assertNotIn('Amores 1003', [r['name_config'] for r in self.catalogo['settings']])
+        self.assertIn('Ciudad Mendoza', [r['name_config'] for r in self.catalogo['settings']])
         for campo in ('password', 'iv', 'host', 'user', 'ubicacion', 'privado'):
             datos = copy.deepcopy(self.catalogo)
             datos['settings'][0][campo] = 'no_distribuir'
