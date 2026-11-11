@@ -27,14 +27,14 @@ class RecuperarCatalogoTests(unittest.TestCase):
         self.plantilla=json.loads((RAIZ/'Config/config_files/database_connection_configuration.json.example').read_text())
         self.local=copy.deepcopy(self.plantilla)
 
-    def test_ejemplo_intacto_recupera_doce_y_ciudad_retirada(self):
+    def test_ejemplo_intacto_recupera_doce_y_amores_retirado(self):
         antes=copy.deepcopy(self.local)
         datos,resumen=recuperar_catalogo(self.local,self.catalogo,self.plantilla)
         self.assertEqual(len(datos['settings']),13)
         self.assertEqual(len(resumen['agregados']),12)
         self.assertEqual(resumen['ejemplos_eliminados'],['db_ejemplo'])
         self.assertNotIn('db_ejemplo',[r['database'] for r in datos['settings']])
-        self.assertEqual(datos['estacionamientos_eliminados'][0]['name_config'],'Ciudad Mendoza')
+        self.assertEqual(datos['estacionamientos_eliminados'][0]['name_config'],'Amores 1003')
         self.assertTrue(all(r['activo'] for r in datos['settings'][1:]))
         self.assertEqual(self.local,antes)
 
@@ -82,7 +82,7 @@ class RecuperarCatalogoTests(unittest.TestCase):
 
     def test_conflicto_de_correo_o_retirado_activo_aborta_sin_mutar_entrada(self):
         for registro in [dict(self.catalogo['settings'][0],database='db_otra',name_config='Personalizado',id='otro'),
-                         {'name_config':'Ciudad Mendoza','database':'db_ciudad_mendoza','email':'ciudad@example.invalid'}]:
+                         {'name_config':'Amores 1003','database':'db_amores_1003','email':'amores@example.invalid'}]:
             local=copy.deepcopy(self.local);local['settings'].append(registro)
             antes=copy.deepcopy(local)
             with self.assertRaises(ValueError): recuperar_catalogo(local,self.catalogo,self.plantilla)
@@ -182,7 +182,8 @@ class AutorizacionesTests(unittest.TestCase):
         self.local['settings'][1]['activo']=False
         nuevo,bases=ampliar_asociaciones(self.perfil,self.local)
         self.assertEqual(len(bases),11)
-        self.assertNotIn('db_ciudad_mendoza',bases)
+        self.assertIn('db_ciudad_mendoza',bases)
+        self.assertNotIn('db_amores_1003',bases)
         self.assertNotIn(self.local['settings'][1]['database'],bases)
 
     def test_cambio_de_remitente_o_base_no_se_resuelve_silenciosamente(self):
@@ -299,7 +300,8 @@ class AutorizacionesTests(unittest.TestCase):
             bases,nombres=controlador.get_db_list(propagar_error=True)
             self.assertEqual(len(nombres),12)
             self.assertIn('db_PUNTO_SANTA_ROSA_PV',bases)
-            self.assertNotIn('Ciudad Mendoza',nombres)
+            self.assertIn('Ciudad Mendoza',nombres)
+            self.assertNotIn('Amores 1003',nombres)
             perfil,_=ampliar_asociaciones(self.perfil,datos)
             actualizador=ActualizadorRespaldos.__new__(ActualizadorRespaldos)
             actualizador.configuracion=Mock(database_config_file=ruta);actualizador.perfil=perfil
