@@ -44,9 +44,9 @@ def check(cur, schema, permitir_vistas=False):
                        and tabla=='MovsUsuarios' and principal=='Usuarios'
                        and columnas==[('Idusuario','Id_usuario')])
             if excepcion:
-                cur.execute(f'SELECT h.Idusuario, COUNT(*) FROM {ident(schema)}.\`MovsUsuarios\` h '
+                cur.execute(f'SELECT h.Idusuario, COUNT(*) FROM {ident(schema)}.`MovsUsuarios` h '
                             f'WHERE h.Idusuario IS NOT NULL AND NOT EXISTS '
-                            f'(SELECT 1 FROM {ident(schema)}.\`Usuarios\` p WHERE h.Idusuario=p.Id_usuario) '
+                            f'(SELECT 1 FROM {ident(schema)}.`Usuarios` p WHERE h.Idusuario=p.Id_usuario) '
                             f'GROUP BY h.Idusuario ORDER BY h.Idusuario')
                 excepcion=cur.fetchall()==((13,32),(14,12))
             if not excepcion: raise RuntimeError('Existen relaciones huérfanas')
