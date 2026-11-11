@@ -26,7 +26,7 @@ class PaqueteWindowsTests(unittest.TestCase):
         catalogo = json.loads(originales['database_connection_configuration.json'])
         activos = [r for r in catalogo['settings'] if r.get('activo')]
         self.assertEqual(len(activos), 12)
-        self.assertEqual(catalogo['estacionamientos_eliminados'][0]['name_config'], 'Ciudad Mendoza')
+        self.assertEqual(catalogo['estacionamientos_eliminados'][0]['name_config'], 'Amores 1003')
 
     def test_cancelar_o_clave_invalida_no_publica_configuracion(self):
         for clave in ('',):
