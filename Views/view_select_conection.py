@@ -46,13 +46,19 @@ class View_Conect:
         # deshabilita los botones de minimizar y maximizar
         # self.panel_connect.attributes('-toolwindow', True)
 
-        # Establece la geometría de la ventana con su posición y tamaño
-        self.panel_connect.geometry()
-        self.panel_connect.resizable(False, False)
+        # Ventana amplia para conservar el selector a la izquierda y mostrar
+        # el contenido de cada función en el panel derecho.
+        ancho = min(1180, max(900, self.panel_connect.winfo_screenwidth() - 100))
+        alto = min(700, max(560, self.panel_connect.winfo_screenheight() - 120))
+        self.panel_connect.geometry(f'{ancho}x{alto}')
+        self.panel_connect.minsize(900, 560)
+        self.panel_connect.resizable(True, True)
         self.panel_connect.title(f'Selecciona la conexión')
 
-        # Configura la columna principal del panel para que use todo el espacio disponible
-        self.panel_connect.columnconfigure(0, weight=1)
+        # Distribución horizontal: selector original a la izquierda y contenido a la derecha.
+        self.panel_connect.columnconfigure(0, weight=0, minsize=330)
+        self.panel_connect.columnconfigure(1, weight=1)
+        self.panel_connect.rowconfigure(0, weight=1)
 
         # Crea las instancias de las clases Tools() y Controller_Select_Conection(permiso=permiso)
         self.tools_instance = Tools()
@@ -80,10 +86,6 @@ class View_Conect:
         # Llama a la función interface() que configura la interfaz gráfica
         self.interface()
 
-        # El administrador accede al catálogo local antes de cualquier reporte.
-        if self.permiso == 'admin':
-            self.panel_connect.after_idle(self.abrir_administracion)
-
         # Inicia el loop principal de la ventana
         self.panel_connect.mainloop()
 
@@ -98,8 +100,24 @@ class View_Conect:
         :return:
             - None
         """
-        # Se crea un Label Frame principal para la sección superior
-        seccion_superior = ttk.LabelFrame(self.panel_connect, text='')
+        self.panel_izquierdo = ttk.Frame(self.panel_connect, padding=(4, 4))
+        self.panel_izquierdo.grid(row=0, column=0, sticky='nsew')
+        self.panel_izquierdo.columnconfigure(0, weight=1)
+
+        self.panel_derecho = ttk.LabelFrame(self.panel_connect, text='Área de trabajo', padding=10)
+        self.panel_derecho.grid(row=0, column=1, sticky='nsew', padx=(4, 8), pady=8)
+        self.panel_derecho.columnconfigure(0, weight=1)
+        self.panel_derecho.rowconfigure(1, weight=1)
+        self.titulo_contenido = ttk.Label(self.panel_derecho, text='Bienvenido al Panel de Administración', font=('TkDefaultFont', 12, 'bold'))
+        self.titulo_contenido.grid(row=0, column=0, sticky='w', pady=(0, 8))
+        self.contenido = ttk.Frame(self.panel_derecho)
+        self.contenido.grid(row=1, column=0, sticky='nsew')
+        self.contenido.columnconfigure(0, weight=1)
+        self.contenido.rowconfigure(0, weight=1)
+        self.mostrar_inicio()
+
+        # Se conserva el diseño original de los controles del lado izquierdo.
+        seccion_superior = ttk.LabelFrame(self.panel_izquierdo, text='')
         seccion_superior.columnconfigure(1, weight=1)
         seccion_superior.propagate(True)
         seccion_superior.grid(row=0, column=0, sticky=tk.NSEW)
@@ -123,7 +141,7 @@ class View_Conect:
 
         # Se crea un Label Frame para la sección de la conexión
         seccion_conecion = ttk.LabelFrame(
-            self.panel_connect, text='Selecciona la conexión')
+            self.panel_izquierdo, text='Selecciona la conexión')
         seccion_conecion.columnconfigure(1, weight=1)
         seccion_conecion.propagate(True)
         seccion_conecion.grid(row=1, column=0)
@@ -142,7 +160,7 @@ class View_Conect:
 
 
         # Se crea un Label Frame para la sección de los botones
-        seccion_botones = ttk.LabelFrame(self.panel_connect, text='')
+        seccion_botones = ttk.LabelFrame(self.panel_izquierdo, text='')
         seccion_botones.grid(row=2, column=0)
 
         # Se crea un botón para conectarse a la opción seleccionada
@@ -167,41 +185,66 @@ class View_Conect:
         self.boton_seleccionar.configure(state='normal' if self.opciones_conexiones else 'disabled')
         self.estado_catalogo.configure(text='' if self.opciones_conexiones else 'No hay estacionamientos activos.')
 
+    def limpiar_contenido(self, titulo):
+        vista_estado = getattr(self, 'estado_actualizacion', None)
+        if vista_estado is not None and getattr(vista_estado, 'ocupado', False):
+            from tkinter import messagebox
+            messagebox.showinfo('Actualización en curso',
+                                'Espera a que termine la actualización antes de cambiar de función.',
+                                parent=self.panel_connect)
+            return False
+        for widget in self.contenido.winfo_children():
+            widget.destroy()
+        self.titulo_contenido.configure(text=titulo)
+        return True
+
+    def mostrar_inicio(self):
+        self.limpiar_contenido('Área de trabajo')
+        ttk.Label(
+            self.contenido,
+            text='Selecciona una opción del lado izquierdo.\n\n'
+                 'La información y las herramientas de cada botón aparecerán en esta área.',
+            justify='left', wraplength=520
+        ).grid(row=0, column=0, sticky='nw', padx=12, pady=12)
+
     def abrir_administracion(self):
         from tkinter import messagebox
         try:
-            ventana = getattr(self, 'admin_estacionamientos', None)
-            if ventana is not None and ventana.window.winfo_exists():
-                ventana.window.lift()
+            if not self.limpiar_contenido('Administrar estacionamientos'):
                 return
-            self.admin_estacionamientos = self.select_controller.abrir_administracion(self.panel_connect, lambda: self.actualizar_estacionamientos(propagar_error=True))
+            self.admin_estacionamientos = self.select_controller.abrir_administracion(
+                self.panel_connect,
+                lambda: self.actualizar_estacionamientos(propagar_error=True),
+                container=self.contenido,
+                on_close=self.mostrar_inicio
+            )
         except (PermissionError, ValueError, OSError):
-            messagebox.showerror('Administración', 'No se pudo abrir la administración.')
+            messagebox.showerror('Administración', 'No se pudo abrir la administración.', parent=self.panel_connect)
+            self.mostrar_inicio()
 
     def abrir_estado_actualizacion(self):
         from tkinter import messagebox
         try:
-            ventana = getattr(self, 'estado_actualizacion', None)
-            if ventana is not None and ventana.window.winfo_exists():
-                ventana.refrescar()
-                ventana.window.lift()
+            if not self.limpiar_contenido('Estado de actualización'):
                 return
-            self.estado_actualizacion = self.select_controller.abrir_estado_actualizacion(self.panel_connect)
+            self.estado_actualizacion = self.select_controller.abrir_estado_actualizacion(
+                self.panel_connect,
+                container=self.contenido,
+                on_close=self.mostrar_inicio
+            )
         except (OSError, ValueError):
             messagebox.showerror('Estado de actualización', 'No se pudo leer el catálogo local.', parent=self.panel_connect)
+            self.mostrar_inicio()
 
     def cargar_informacion(self):
         if not self.variable_estacionamiento.get():
             return
-        self.desactivar()
-        try:
-            self.select_controller.conectar(self.variable_estacionamiento.get(), self.user_name, self.reportes)
-        finally:
-            self.activar()
-
-
-
-
+        if not self.limpiar_contenido('Cargar información'):
+            return
+        self.select_controller.conectar(
+            self.variable_estacionamiento.get(), self.user_name,
+            self.reportes, container=self.contenido
+        )
 
     def salir(self):
         """

@@ -22,18 +22,18 @@ class Controller_Select_Conection:
             config_path = Tools().read_path_config_file('config_files', 'database_config_file')
         self.config = EstacionamientosConfig(config_path, permiso)
 
-    def abrir_administracion(self, parent, on_change):
+    def abrir_administracion(self, parent, on_change, container=None, on_close=None):
         exigir_admin(self.permiso)
         from Views.view_admin_estacionamientos import ViewAdminEstacionamientos
-        return ViewAdminEstacionamientos(parent, self.config, on_change, self.permiso)
+        return ViewAdminEstacionamientos(parent, self.config, on_change, self.permiso, container, on_close)
 
-    def abrir_estado_actualizacion(self, parent, ruta_sqlite=None):
+    def abrir_estado_actualizacion(self, parent, ruta_sqlite=None, container=None, on_close=None):
         exigir_admin(self.permiso)
         from Models.estado_actualizaciones import EstadoActualizaciones
         from Views.view_estado_actualizaciones import ViewEstadoActualizaciones
-        return ViewEstadoActualizaciones(parent, EstadoActualizaciones(self.config, ruta_sqlite))
+        return ViewEstadoActualizaciones(parent, EstadoActualizaciones(self.config, ruta_sqlite), container, on_close)
 
-    def conectar(self, estacionamiento: str, user_name: str, reportes: dict) -> None:
+    def conectar(self, estacionamiento: str, user_name: str, reportes: dict, container=None) -> None:
         """
         Establece la conexión a una base de datos seleccionada por el usuario y muestra la vista de informes.
 
@@ -57,7 +57,7 @@ class Controller_Select_Conection:
 
             print(f'Conectando a -> {self.estacionamiento}')
             View_Report(user_name=self.user_name, estacionamiento=self.estacionamiento,
-                        reportes=self.reportes, admin=True)
+                        reportes=self.reportes, admin=(self.permiso == 'admin'), container=container)
 
         except TypeError as e:
             # Si se produce una excepción TypeError, muestra un mensaje de advertencia

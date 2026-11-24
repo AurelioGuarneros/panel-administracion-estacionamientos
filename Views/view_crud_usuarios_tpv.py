@@ -10,27 +10,33 @@ from tkinter import StringVar
 
 from PIL import ImageTk, Image
 from tkinter import PhotoImage
+from Views.embedded_view import crear_panel_embebido
 
 
 class View_CRUD_usuarios:
 
-    def __init__(self, estacionamiento=None, user_name=None, query: Queries = None):
+    def __init__(self, estacionamiento=None, user_name=None, query: Queries = None, container=None, on_back=None):
 
         self.estacionamiento = estacionamiento
         self.user_name = user_name
         self.query = query
 
-        # Crea la ventana principal
-        self.panel_crud = tk.Toplevel()
+        self.embebido = container is not None
+        self.on_back = on_back
+
+        # Crea la ventana principal o el área embebida
+        self.panel_crud = crear_panel_embebido(container, on_back) if self.embebido else tk.Toplevel()
 
         # Se elimina la funcionalidad del botón de cerrar
-        self.panel_crud.protocol(
-            "WM_DELETE_WINDOW", lambda: self.desconectar())
+        if not self.embebido:
+            self.panel_crud.protocol(
+                "WM_DELETE_WINDOW", lambda: self.desconectar())
 
         # Deshabilita los botones de minimizar y maximizar
         # self.panel_crud.attributes('-toolwindow', True)
 
-        self.panel_crud.title(f'Administración de usuarios')
+        if not self.embebido:
+            self.panel_crud.title(f'Administración de usuarios')
 
         # Configura la columna principal del panel para que use todo el espacio disponible
         self.panel_crud.columnconfigure(0, weight=1)
@@ -71,11 +77,13 @@ class View_CRUD_usuarios:
         # pos_y = int(self.seccion_tabla.winfo_screenheight() / 2)
 
         # Establece la geometría de la ventana con su posición y tamaño
-        self.panel_crud.geometry(f"850x500")
+        if not self.embebido:
+            self.panel_crud.geometry(f"850x500")
         # self.panel_crud.resizable(False, False)
 
         # Inicia el loop principal de la ventana
-        self.panel_crud.mainloop()
+        if not self.embebido:
+            self.panel_crud.mainloop()
 
     def interface(self):
         """
@@ -346,6 +354,11 @@ class View_CRUD_usuarios:
         :return:
             - None
         """
+        if self.embebido:
+            self.panel_crud.destroy()
+            if callable(self.on_back):
+                self.on_back()
+            return
         # detener el loop principal
         self.panel_crud.quit()
         # Destruye el panel principal
@@ -362,5 +375,8 @@ class View_CRUD_usuarios:
         :return:
             - None
         """
+        if self.embebido:
+            self.desconectar()
+            return
         self.desconectar()
         raise SystemExit

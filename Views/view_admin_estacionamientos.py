@@ -7,23 +7,29 @@ from Models.estacionamientos_config import ErrorValidacion, exigir_admin
 
 
 class ViewAdminEstacionamientos:
-    def __init__(self, parent, modelo, on_change, permiso=None):
+    def __init__(self, parent, modelo, on_change, permiso=None, container=None, on_close=None):
         exigir_admin(permiso)
         exigir_admin(modelo.permiso)
         self.modelo, self.on_change = modelo, on_change
+        self.on_close = on_close
+        self.embebido = container is not None
         registros = self.modelo.listar()
-        self.window = tk.Toplevel(parent)
+        self.window = container if self.embebido else tk.Toplevel(parent)
         try:
             self.construir(registros)
         except Exception:
-            self.window.destroy()
+            if not self.embebido:
+                self.window.destroy()
             raise
 
     def construir(self, registros):
-        self.window.title('Administrar estacionamientos')
-        ancho = min(960, max(320, self.window.winfo_screenwidth() - 40))
-        alto = min(520, max(240, self.window.winfo_screenheight() - 80))
-        self.window.geometry(f'{ancho}x{alto}')
+        if not self.embebido:
+            self.window.title('Administrar estacionamientos')
+            ancho = min(960, max(320, self.window.winfo_screenwidth() - 40))
+            alto = min(520, max(240, self.window.winfo_screenheight() - 80))
+            self.window.geometry(f'{ancho}x{alto}')
+        else:
+            ancho = max(600, self.window.winfo_width())
         self.window.rowconfigure(0, weight=1)
         self.window.columnconfigure(1, weight=1)
         marco = ttk.Frame(self.window)
@@ -52,7 +58,8 @@ class ViewAdminEstacionamientos:
         self.plantilla.grid(row=5, column=1, columnspan=2, sticky='ew', padx=6)
         ayuda = ttk.Label(self.window, text='Las altas quedan pendientes de verificación, con actualización automática deshabilitada. El remitente debe ser exclusivo, incluso entre inactivos. El correo central receptor se configura por separado.', wraplength=ancho - 24)
         ayuda.grid(row=6, column=0, columnspan=3, pady=4, sticky='ew')
-        self.window.bind('<Configure>', lambda event: ayuda.configure(wraplength=max(100, event.width - 24)) if event.widget == self.window else None)
+        if not self.embebido:
+            self.window.bind('<Configure>', lambda event: ayuda.configure(wraplength=max(100, event.width - 24)) if event.widget == self.window else None)
         for columna, (titulo, accion) in enumerate((('Agregar con plantilla', self.agregar), ('Reincorporar retirado…', self.reincorporar), ('Guardar edición', self.editar), ('Activar / desactivar', self.cambiar_estado), ('Eliminar definitivamente del catálogo…', self.eliminar))):
             ttk.Button(self.window, text=titulo, command=accion).grid(row=7 + columna, column=0, columnspan=3, sticky='ew', padx=6, pady=2)
         self.recargar(registros)

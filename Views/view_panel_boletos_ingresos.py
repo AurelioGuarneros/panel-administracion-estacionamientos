@@ -13,6 +13,7 @@ from PIL import ImageTk, Image
 
 
 
+from Views.embedded_view import crear_panel_embebido
 class View_Panel_Boletos_Ingresos:
     """
     Clase de la vista de selección de conexion.
@@ -30,7 +31,7 @@ class View_Panel_Boletos_Ingresos:
     def __init__(self,
                  user_name=None,
                  estacionamiento=None,
-                 query: Queries = None):
+                 query: Queries = None, container=None, on_back=None):
         """
         Constructor de la clase. Crea la ventana principal, la tabla y los campos de consulta.
 
@@ -48,14 +49,17 @@ class View_Panel_Boletos_Ingresos:
 
         self.query = query
 
+        self.embebido = container is not None
+        self.on_back = on_back
+
         if self.query.data_base.connection:
             # Crea la ventana principal
-            self.panel_boletos = tk.Toplevel()
+            self.panel_boletos = crear_panel_embebido(container, on_back) if self.embebido else tk.Toplevel()
             # instancia de la clase de herramientas
             self.tools_instance = Tools()
             # se elimina la funcinalidad del boton de cerrar
-            self.panel_boletos.protocol(
-                "WM_DELETE_WINDOW", lambda: self.desconectar())
+            if not self.embebido:
+                self.panel_boletos.protocol("WM_DELETE_WINDOW", lambda: self.desconectar())
             # # deshabilita los botones de minimizar y maximizar
             # self.panel_boletos.attributes('-toolwindow', True)
             # # coloca la ventana al frente de otras ventanas
@@ -66,9 +70,11 @@ class View_Panel_Boletos_Ingresos:
             
             # self.panel_boletos.geometry(f"650x270")
 
-            self.panel_boletos.resizable(False, False)
+            if not self.embebido:
+                self.panel_boletos.resizable(False, False)
 
-            self.panel_boletos.title(
+            if not self.embebido:
+                self.panel_boletos.title(
                 f'Panel de administración reporte de boletos e ingresos')
             
             # Configura la columna principal del panel para que use todo el espacio disponible
@@ -140,7 +146,8 @@ class View_Panel_Boletos_Ingresos:
             self.view_campos_consulta()
 
             # Inicia el loop principal de la ventana
-            self.panel_boletos.mainloop()
+            if not self.embebido:
+                self.panel_boletos.mainloop()
         else:
             return None
 
@@ -555,7 +562,8 @@ class View_Panel_Boletos_Ingresos:
 
             # Se llena la tabla con los registros obtenidos
             self.llenar_tabla(self.registros_boletos)
-            self.panel_boletos.geometry(f"900x570")
+            if not self.embebido:
+                self.panel_boletos.geometry(f"900x570")
 
         except Exception as e:
             print(e)
@@ -626,6 +634,11 @@ class View_Panel_Boletos_Ingresos:
         :return:
             - None
         """
+        if self.embebido:
+            self.panel.destroy()
+            if callable(self.on_back):
+                self.on_back()
+            return
         # detener el loop principal
         self.panel_boletos.quit()
         # Destruye el panel principal
@@ -642,6 +655,9 @@ class View_Panel_Boletos_Ingresos:
         :return:
             - None
         """
+        if self.embebido:
+            self.desconectar()
+            return
         self.desconectar()
         self.query.data_base.close_connection()
         raise SystemExit

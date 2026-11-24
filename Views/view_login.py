@@ -3,7 +3,6 @@ from Controller.controller_login import ControllerLogin
 
 import tkinter as tk
 from tkinter import ttk
-from ttkthemes import ThemedStyle
 from PIL import ImageTk, Image
 
 
@@ -18,9 +17,6 @@ class View_Login:
         """
         # Crea la ventana principal
         self.window_login = tk.Tk()
-
-        # temas xd
-        self.style = ThemedStyle(self.window_login)
 
         # Establece el tamaño de la ventana y su título
         self.window_login.title(f'Login')
@@ -41,9 +37,6 @@ class View_Login:
         # Crea las variables para los datos de usuario y tema
         self.user = tk.StringVar()
         self.password = tk.StringVar()
-        self.theme = tk.StringVar()
-        self.true_theme = None
-
         # Crea instancias de otras clases
         tools_instance = Tools()
         self.controller_login = ControllerLogin()
@@ -115,67 +108,6 @@ class View_Login:
                                        })
         self.boton_entrar.grid(row=0, column=2, padx=5, pady=5)
 
-        # Crea un frame para la sección del tema
-        seccion_tema = ttk.LabelFrame(
-            self.seccion_principal, text='Si lo deseas, selecciona un tema', padding=10)
-        seccion_tema.grid(row=2, column=0, sticky=tk.NSEW)
-
-        # Define la lista de temas
-        THEMES = [
-            'default',
-            "adapta",
-            "aquativo",
-            "arc",
-            "black",
-            "blue",
-            "breeze",
-            "clearlooks",
-            "elegance",
-            "equilux",
-            "itft1",
-            "keramik",
-            "kroc",
-            "plastik",
-            "radiance",
-            "scidblue",
-            "scidgreen",
-            "scidgrey",
-            "scidmint",
-            "scidpink",
-            "scidpurple",
-            "scidsand",
-            "smog",
-            "ubuntu",
-            "winxpblue",
-            "yaru"
-        ]
-
-        # Crear una lista desplegable con los temas disponibles
-        lista_desplegable_tema = ttk.Combobox(
-            seccion_tema,  values=THEMES, textvariable=self.theme, state='readonly', height=5)
-        lista_desplegable_tema.grid(row=2, column=0, padx=5, pady=5)
-
-        # Crear un botón para seleccionar el tema
-        self.boton_selecionar_tema = ttk.Button(
-            seccion_tema, text='Seleccionar tema', command=lambda: self.seleccionar_tema(self.theme.get()))
-        self.boton_selecionar_tema.grid(row=2, column=2, padx=5, pady=5)
-
-    def seleccionar_tema(self,
-                         theme=None):
-        """
-        Esta función cambia el tema de la interface a partir del argumento "theme".
-        Si no se proporciona un tema específico, se mantendrá el tema actual.
-
-        :param theme (str or None): El nombre del tema a utilizar en la interface.
-
-        :raises None: 
-
-        :return:
-            - None
-        """
-        if theme:
-            self.style.theme_use(theme)
-
     def desactivar(self):
         """
         Desactiva los botones de la interface
@@ -189,7 +121,6 @@ class View_Login:
         """
         self.window_login.withdraw()  # oculta la ventana
         self.boton_entrar.config(state="disable")
-        self.boton_selecionar_tema.config(state="disable")
 
     def activar(self):
         """
@@ -205,4 +136,3 @@ class View_Login:
         self.password.set("")
         self.window_login.deiconify()
         self.boton_entrar.config(state="normal")
-        self.boton_selecionar_tema.config(state="normal")

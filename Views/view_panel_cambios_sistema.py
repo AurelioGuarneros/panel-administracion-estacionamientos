@@ -11,6 +11,7 @@ from PIL import ImageTk, Image
 
 
 
+from Views.embedded_view import crear_panel_embebido
 class View_panel_cambios:
     """
     Clase de la vista de selección de conexion.
@@ -25,7 +26,7 @@ class View_panel_cambios:
         - None
     """
 
-    def __init__(self, user_name: str = None, estacionamiento: str = None, query: Queries = None):
+    def __init__(self, user_name: str = None, estacionamiento: str = None, query: Queries = None, container=None, on_back=None):
         """
         Constructor de la clase. Crea la ventana principal, la tabla y los campos de consulta.
 
@@ -37,14 +38,17 @@ class View_panel_cambios:
 
         self.query = query
 
+        self.embebido = container is not None
+        self.on_back = on_back
+
         if self.query.data_base.connection:
             # Crea la ventana principal
-            self.panel_cambios = tk.Toplevel()
+            self.panel_cambios = crear_panel_embebido(container, on_back) if self.embebido else tk.Toplevel()
             # instancia de la clase de herramientas
             tools_instance = Tools()
             # se elimina la funcinalidad del boton de cerrar
-            self.panel_cambios.protocol(
-                "WM_DELETE_WINDOW", lambda: self.desconectar())
+            if not self.embebido:
+                self.panel_cambios.protocol("WM_DELETE_WINDOW", lambda: self.desconectar())
             # # deshabilita los botones de minimizar y maximizar
             # self.panel_cambios.attributes('-toolwindow', True)
             # # coloca la ventana al frente de otras ventanas
@@ -55,7 +59,8 @@ class View_panel_cambios:
 
             # self.panel_cambios.resizable(False, True)
 
-            self.panel_cambios.title(f'Panel de administración reporte de cambios de sistema')
+            if not self.embebido:
+                self.panel_cambios.title(f'Panel de administración reporte de cambios de sistema')
 
             # Configura la columna principal del panel para que use todo el espacio disponible
             # self.panel_cambios.columnconfigure(0, weight=1)
@@ -117,7 +122,8 @@ class View_panel_cambios:
             self.view_campos_consulta()
 
             # Inicia el loop principal de la ventana
-            self.panel_cambios.mainloop()
+            if not self.embebido:
+                self.panel_cambios.mainloop()
         else:
             return None
 
@@ -348,6 +354,11 @@ class View_panel_cambios:
         :return:
             - None
         """
+        if self.embebido:
+            self.panel.destroy()
+            if callable(self.on_back):
+                self.on_back()
+            return
         # detener el loop principal
         self.panel_cambios.quit()
         # Destruye el panel principal
@@ -364,6 +375,9 @@ class View_panel_cambios:
         :return:
             - None
         """
+        if self.embebido:
+            self.desconectar()
+            return
         self.desconectar()
         self.query.data_base.close_connection()
         raise SystemExit

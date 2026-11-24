@@ -6,24 +6,31 @@ import threading
 
 
 class ViewEstadoActualizaciones:
-    def __init__(self, parent, modelo):
+    def __init__(self, parent, modelo, container=None, on_close=None):
         self.modelo = modelo
+        self.on_close = on_close
+        self.embebido = container is not None
         self.ocupado = False
         self.cola = queue.Queue()
-        self.window = tk.Toplevel(parent)
-        self.window.protocol("WM_DELETE_WINDOW", self.cerrar)
+        self.window = container if self.embebido else tk.Toplevel(parent)
+        if not self.embebido:
+            self.window.protocol("WM_DELETE_WINDOW", self.cerrar)
         try:
             self.construir()
             self.refrescar()
         except Exception:
-            self.window.destroy()
+            if not self.embebido:
+                self.window.destroy()
             raise
 
     def construir(self):
-        self.window.title('Estado de actualización')
-        ancho = min(1180, max(320, self.window.winfo_screenwidth() - 60))
-        alto = min(580, max(280, self.window.winfo_screenheight() - 100))
-        self.window.geometry(f'{ancho}x{alto}')
+        if not self.embebido:
+            self.window.title('Estado de actualización')
+            ancho = min(1180, max(320, self.window.winfo_screenwidth() - 60))
+            alto = min(580, max(280, self.window.winfo_screenheight() - 100))
+            self.window.geometry(f'{ancho}x{alto}')
+        else:
+            ancho = max(600, self.window.winfo_width())
         self.window.columnconfigure(0, weight=1)
         self.window.rowconfigure(2, weight=1)
         self.ayuda = ttk.Label(self.window, text='La apertura solo lee el registro local. Usa los botones para consultar el correo, descargar ZIP validados e importar en MariaDB local.', wraplength=ancho-24)
@@ -68,8 +75,9 @@ class ViewEstadoActualizaciones:
             boton = ttk.Button(botones, text=texto, command=lambda i=importar,t=todos: self.actualizar(i,t))
             boton.pack(side='left',padx=3)
             self.acciones.append(boton)
-        ttk.Button(botones, text='Cerrar', command=self.cerrar).pack(side='right')
-        self.window.bind('<Configure>', self.redimensionar)
+        ttk.Button(botones, text='Volver', command=self.cerrar).pack(side='right')
+        if not self.embebido:
+            self.window.bind('<Configure>', self.redimensionar)
 
     def redimensionar(self, event):
         if event.widget == self.window:
@@ -110,7 +118,13 @@ class ViewEstadoActualizaciones:
         if self.ocupado:
             messagebox.showinfo('Actualización', 'Espera a que finalice la actualización en curso.', parent=self.window)
             return
-        self.window.destroy()
+        if self.embebido:
+            for widget in self.window.winfo_children():
+                widget.destroy()
+            if self.on_close:
+                self.on_close()
+        else:
+            self.window.destroy()
 
     def solicitar_clave_correo(self):
         from tkinter import simpledialog

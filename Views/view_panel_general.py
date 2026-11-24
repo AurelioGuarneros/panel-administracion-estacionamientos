@@ -10,6 +10,7 @@ from tkinter import PhotoImage
 from PIL import ImageTk, Image
 
 
+from Views.embedded_view import crear_panel_embebido
 class View_Panel_General:
     """
     Clase principal que maneja la interfaz gráfica del usuario.
@@ -27,7 +28,7 @@ class View_Panel_General:
     def __init__(self,
                  user_name=None,
                  estacionamiento=None,
-                 query:Queries=None):
+                 query:Queries=None, container=None, on_back=None):
         """
         Constructor de la clase. Crea la ventana principal, la tabla y los campos de consulta.
 
@@ -49,12 +50,16 @@ class View_Panel_General:
         self.parametros = ''
         self.promociones = ''
 
+        self.embebido = container is not None
+        self.on_back = on_back
+
         if self.query.data_base.connection:
 
             # Crea la ventana principal
-            self.panel = tk.Toplevel()
+            self.panel = crear_panel_embebido(container, on_back) if self.embebido else tk.Toplevel()
             # se elimina la funcinalidad del boton de cerrar
-            self.panel.protocol("WM_DELETE_WINDOW", lambda: self.desconectar())
+            if not self.embebido:
+                self.panel.protocol("WM_DELETE_WINDOW", lambda: self.desconectar())
             # deshabilita los botones de minimizar y maximizar
             # self.panel.attributes('-toolwindow', True)
 
@@ -64,10 +69,13 @@ class View_Panel_General:
             # Establece el tamaño de la ventana y su título
             pos_x = int(ancho_max/3)
             pos_y = 10
-            self.panel.geometry(f"+{pos_x}+{pos_y}")
-            self.panel.resizable(False, True)
+            if not self.embebido:
+                self.panel.geometry(f"+{pos_x}+{pos_y}")
+            if not self.embebido:
+                self.panel.resizable(False, True)
 
-            self.panel.title(f'Panel de administración reporte general')
+            if not self.embebido:
+                self.panel.title(f'Panel de administración reporte general')
 
             # Configura la columna principal del panel para que use todo el espacio disponible
             self.panel.columnconfigure(0, weight=1)
@@ -146,7 +154,8 @@ class View_Panel_General:
             self.view_campos_consulta()
 
             # Inicia el loop principal de la ventana
-            self.panel.mainloop()
+            if not self.embebido:
+                self.panel.mainloop()
         else:
             return None
 
@@ -424,8 +433,10 @@ class View_Panel_General:
         seccion_reporte_avanzada = ttk.LabelFrame(
             notebook_consulta_general, text='')
         seccion_reporte_avanzada.grid_propagate(True)
-        notebook_consulta_general.add(
-            seccion_reporte_avanzada, text="Reporte avanzado")
+        # Se oculta la pestaña "Reporte avanzado"; se conserva el código
+        # interno para no afectar otras funciones del reporte general.
+        # notebook_consulta_general.add(
+        #     seccion_reporte_avanzada, text="Reporte avanzado")
         #####################################################
         seccion_fechas = ttk.LabelFrame(
             seccion_reporte_avanzada, text='Filtro por fechas')
@@ -916,6 +927,11 @@ class View_Panel_General:
         :return:
             - None
         """
+        if self.embebido:
+            self.panel.destroy()
+            if callable(self.on_back):
+                self.on_back()
+            return
         # detener el loop principal
         self.panel.quit()
         # Destruye el panel principal
@@ -932,6 +948,9 @@ class View_Panel_General:
         :return:
             - None
         """
+        if self.embebido:
+            self.desconectar()
+            return
         self.desconectar()
         self.query.data_base.close_connection()
         raise SystemExit

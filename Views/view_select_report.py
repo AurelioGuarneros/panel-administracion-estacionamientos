@@ -29,7 +29,7 @@ class View_Report:
         - None
     """
 
-    def __init__(self, user_name: str = None, estacionamiento: str = None, reportes: dict = None, admin: bool = False) -> None:
+    def __init__(self, user_name: str = None, estacionamiento: str = None, reportes: dict = None, admin: bool = False, container=None) -> None:
         """
         Constructor de la clase. Crea la ventana principal para la selección de reportes.
 
@@ -46,24 +46,23 @@ class View_Report:
         self.estacionamiento = estacionamiento
         self.reportes = reportes
         self.admin = admin
+        self.embebido = container is not None
         self.query = Queries(estacionamiento=self.estacionamiento)
 
         if self.query.data_base.connection:
             # Crea la ventana principal
-            self.panel_report = tk.Toplevel()
+            self.panel_report = container if self.embebido else tk.Toplevel()
 
-            # Se elimina la funcionalidad del botón de cerrar
-            self.panel_report.protocol(
-                "WM_DELETE_WINDOW", lambda: self.desconectar())
+            # El contenedor embebido pertenece a la ventana de selección.
+            if not self.embebido:
+                self.panel_report.protocol("WM_DELETE_WINDOW", lambda: self.desconectar())
 
-            # Calcula la posición de la ventana en la pantalla
-            pos_x = int(self.panel_report.winfo_screenwidth() / 2)
-            pos_y = int(self.panel_report.winfo_screenheight() / 2)
-
-            # Establece la geometría de la ventana con su posición y tamaño
-            self.panel_report.geometry(f"+{pos_x}+{pos_y}")
-            self.panel_report.resizable(False, False)
-            self.panel_report.title(f'Selección de reporte')
+            if not self.embebido:
+                pos_x = int(self.panel_report.winfo_screenwidth() / 2)
+                pos_y = int(self.panel_report.winfo_screenheight() / 2)
+                self.panel_report.geometry(f"+{pos_x}+{pos_y}")
+                self.panel_report.resizable(False, False)
+                self.panel_report.title(f'Selección de reporte')
 
             # Configura la columna principal del panel para que use todo el espacio disponible
             self.panel_report.columnconfigure(0, weight=1)
@@ -98,214 +97,115 @@ class View_Report:
             # Llama a la función interface() que configura la interfaz gráfica
             self.interface()
 
-            # Inicia el loop principal de la ventana
-            self.panel_report.mainloop()
+            # El loop principal lo administra la ventana raíz.
 
     def interface(self) -> None:
-        """Crea la interfaz gráfica para cambiar de conexión y generar reportes."""
-        # Crea un Label Frame principal para la sección superior
-        seccion_superior = ttk.LabelFrame(self.panel_report, text='')
-        seccion_superior.columnconfigure(1, weight=1)
-        seccion_superior.propagate(True)
-        seccion_superior.grid(row=0, column=0, sticky=tk.NSEW)
+        """Muestra las siete funciones dentro del área derecha de la ventana principal."""
+        for widget in self.panel_report.winfo_children():
+            widget.destroy()
+        self.panel_report.columnconfigure(0, weight=1)
+        self.panel_report.rowconfigure(1, weight=1)
 
-        # Crea otro Label Frame para la sección del logo dentro del Label Frame principal
-        seccion_logo = ttk.LabelFrame(seccion_superior, text='')
-        seccion_logo.grid(row=0, column=0, sticky=tk.NSEW)
+        encabezado = ttk.Frame(self.panel_report, padding=(8, 6))
+        encabezado.grid(row=0, column=0, sticky="ew")
+        encabezado.columnconfigure(1, weight=1)
+        ttk.Label(encabezado, text=f"Estacionamiento: {self.estacionamiento}",
+                  font=("TkDefaultFont", 12, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(encabezado, text=f"Usuario: {self.user_name}").grid(
+            row=1, column=0, sticky="w", pady=(3, 0))
 
-        # Crea una etiqueta con la imagen del logo dentro del Label Frame de la sección del logo
-        etiqueta_logo = ttk.Label(seccion_logo, image=self.logo_pase)
-        etiqueta_logo.grid(row=0, column=0, sticky=tk.NSEW)
-
-        # Crea una etiqueta de bienvenida para mostrar el usuario conectado y el estacionamiento
-        etiqueta_bienvenida = ttk.Label(
-            seccion_logo,
-            text=f'Bienvenido/a: {self.user_name}, estas conectado/a a -> {self.estacionamiento}'
-        )
-        etiqueta_bienvenida.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-
-        # Crea un Label Frame para la sección de los botones de reportes
         seccion_botones = ttk.LabelFrame(
-            self.panel_report,
-            text='Selecciona el tipo de reporte a generar')
-        seccion_botones.grid(row=1, column=0)
+            self.panel_report, text="Selecciona la función que deseas abrir", padding=12)
+        seccion_botones.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
+        for columna in range(3):
+            seccion_botones.columnconfigure(columna, weight=1, uniform="funciones")
+        for fila in range(3):
+            seccion_botones.rowconfigure(fila, weight=1)
 
-        # Crea un Label Frame para los botones de desconectar y salir
-        seccion_botones_salir = ttk.LabelFrame(
-            seccion_superior,
-            text='Salir')
-        seccion_botones_salir.grid(row=0, column=3, padx=5, sticky='NW')
-
-        # Crea un botón de desconexión y lo empaqueta en la seccion_botones_salir
-        boton_desconectar = tk.Button(
-            seccion_botones_salir,
-            justify="center",
-            text='Desconectar',
-            command=self.salir,
-            image=self.icono_desconectar
-        )
-        boton_desconectar.grid(row=0, column=0, padx=5, pady=5)
-
-        # Creación de botones y configuración de su estado según si hay reportes disponibles
-        self.boton_general = tk.Button(
-            seccion_botones,
-            justify="center",
-            text='General',
-            state='disable',
-            command=lambda: {
-                # Oculta la ventana actual, abre la ventana correspondiente y muestra la ventana de nuevo
-                self.panel_report.withdraw(),
-                self.boton_general.config(state="disable"),
-                View_Panel_General(
-                    user_name=self.user_name,
-                    estacionamiento=self.estacionamiento,
-                    query=self.query),
-                self.panel_report.deiconify(),
-                self.boton_general.config(state="normal"),
-            })
-        self.boton_general.grid(row=0, column=0, padx=5,pady=5, sticky=tk.NSEW)
-        if self.reportes['Reporte_General']:
-            # Si hay reporte disponible, activa el botón correspondiente
-            self.boton_general.config(state="normal")
-
-        self.boton_boletos = tk.Button(
-            seccion_botones,
-            justify="center",
-            text='Boletos/\nIngresos',
-            state='disable',
-            command=lambda: {
-                # Oculta la ventana actual, abre la ventana correspondiente y muestra la ventana de nuevo
-                self.panel_report.withdraw(),
-                self.boton_boletos.config(state="disable"),
-                View_Panel_Boletos_Ingresos(
-                    user_name=self.user_name,
-                    estacionamiento=self.estacionamiento,
-                    query=self.query),
-                self.panel_report.deiconify(),
-                self.boton_boletos.config(state="normal"),
-            })
-        self.boton_boletos.grid(row=0, column=1, padx=5,pady=5, sticky=tk.NSEW)
-        if self.reportes['Reporte_Boletos_Ingresos']:
-            # Si hay reporte disponible, activa el botón correspondiente
-            self.boton_boletos.config(state="normal")
-
-
-        # Creación de botones y configuración de su estado según si hay reportes disponibles
-        self.boton_dias = tk.Button(
-            seccion_botones,
-            text='Diario',
-            justify="center",
-            state='disable',
-            command=lambda: {
-                # Oculta la ventana actual, abre la ventana correspondiente y muestra la ventana de nuevo
-                self.panel_report.withdraw(),
-                self.boton_dias.config(state="disable"),
-                View_Panel_Dias(
-                    user_name=self.user_name,
-                    estacionamiento=self.estacionamiento,
-                    query=self.query),
-                self.panel_report.deiconify(),
-                self.boton_dias.config(state="normal"),
-            })
-        self.boton_dias.grid(row=0, column=2, padx=5, pady=5, sticky=tk.NSEW)
-        if self.reportes['Reporte_Dias']:
-            # Si hay reporte disponible, activa el botón correspondiente
-            self.boton_dias.config(state="normal")
-
-        self.boton_pensionados = tk.Button(
-            seccion_botones,
-            justify="center",
-            text='Pensionados',
-            state='disable',
-            command=lambda: {
-                # Oculta la ventana actual, abre la ventana correspondiente y muestra la ventana de nuevo
-                self.panel_report.withdraw(),
-                self.boton_pensionados.config(state="disable"),
-                View_Panel_Pensionados(
-                    user_name=self.user_name,
-                    estacionamiento=self.estacionamiento,
-                    query=self.query),
-                self.panel_report.deiconify(),
-                self.boton_pensionados.config(state="normal"),
-            })
-        self.boton_pensionados.grid(row=0, column=3, padx=3, pady=5, sticky=tk.NSEW)
-        if self.reportes['Reporte_Pensionados']:
-            # Si hay reporte disponible, activa el botón correspondiente
-            self.boton_pensionados.config(state="normal")
-
-        self.boton_ingresos_pensiones = tk.Button(
-            seccion_botones,
-            justify="center",
-            text='Ingresos\nPensiones',
-            state='disable',
-            command=lambda: {
-                # Oculta la ventana actual, abre la ventana correspondiente y muestra la ventana de nuevo
-                self.panel_report.withdraw(),
-                self.boton_ingresos_pensiones.config(state="disable"),
-                View_Panel_Ingresos_Pensiones(
-                    user_name=self.user_name,
-                    estacionamiento=self.estacionamiento,
-                    query=self.query),
-                self.panel_report.deiconify(),
-                self.boton_ingresos_pensiones.config(state="normal"),
-            })
-        self.boton_ingresos_pensiones.grid(row=0, column=4, padx=4, pady=5, sticky=tk.NSEW)
-        if self.reportes['Reporte_Ingresos_Pension']:
-            # Si hay reporte disponible, activa el botón correspondiente
-            self.boton_ingresos_pensiones.config(state="normal")
-
-        self.boton_cambios_sistema = tk.Button(
-            seccion_botones,
-            justify="center",
-            text='Cambios del\nSistema',
-            state='disable',
-            command=lambda: {
-                # Oculta la ventana actual, abre la ventana correspondiente y muestra la ventana de nuevo
-                self.panel_report.withdraw(),
-                self.boton_cambios_sistema.config(state="disable"),
-                View_panel_cambios(
-                    user_name=self.user_name,
-                    estacionamiento=self.estacionamiento,
-                    query=self.query),
-                self.panel_report.deiconify(),
-                self.boton_cambios_sistema.config(state="normal"),
-            })
-        self.boton_cambios_sistema.grid(row=0, column=5, padx=4, pady=5, sticky=tk.NSEW)
-        if self.reportes['Reporte_Cambios_Sistema']:
-            # Si hay reporte disponible, activa el botón correspondiente
-            self.boton_cambios_sistema.config(state="normal")
-
+        funciones = [
+            ("General", "Reporte_General", View_Panel_General, 0, 0),
+            ("Boletos / Ingresos", "Reporte_Boletos_Ingresos", View_Panel_Boletos_Ingresos, 0, 1),
+            ("Diario", "Reporte_Dias", View_Panel_Dias, 0, 2),
+            ("Pensiones", "Reporte_Pensionados", View_Panel_Pensionados, 1, 0),
+            ("Ingresos Pensiones", "Reporte_Ingresos_Pension", View_Panel_Ingresos_Pensiones, 1, 1),
+            ("Cambios del sistema", "Reporte_Cambios_Sistema", View_panel_cambios, 1, 2),
+        ]
+        self.botones_funciones = []
+        for texto, permiso, clase, fila, columna in funciones:
+            disponible = bool(self.reportes.get(permiso, False))
+            boton = ttk.Button(
+                seccion_botones, text=texto,
+                command=lambda vista=clase, titulo=texto: self.abrir_funcion(vista, titulo),
+                state="normal" if disponible else "disabled")
+            boton.grid(row=fila, column=columna, sticky="nsew", padx=6, pady=6, ipady=14)
+            self.botones_funciones.append(boton)
 
         if self.admin:
-            self.boton_admin_usuarios = tk.Button(
-                self.panel_report,
-                text='Administrar Usuarios',
-                command=lambda: {
-                    # Se deshabilitan los botones mientras se realiza la conexión
-                    self.desactivar(),
+            boton_usuarios = ttk.Button(
+                seccion_botones, text="Administrar Usuarios",
+                command=self.abrir_usuarios)
+            boton_usuarios.grid(row=2, column=0, columnspan=3,
+                                sticky="nsew", padx=6, pady=6, ipady=10)
 
-                    # Se llama al método conectar del objeto select_controller con la opción seleccionada
-                    self.report_controller.view_crud_usuarios(),
-                    # Se habilitan de nuevo los botones
-                    self.activar(),
-                })
-            self.boton_admin_usuarios.grid(row=3, column=0, padx=5, pady=5)
+    def abrir_funcion(self, clase_vista, titulo):
+        """Abre la función seleccionada dentro de la misma área de trabajo."""
+        if not self.embebido:
+            clase_vista(user_name=self.user_name, estacionamiento=self.estacionamiento,
+                        query=self.query)
+            return
+        for widget in self.panel_report.winfo_children():
+            widget.destroy()
+        clase_vista(user_name=self.user_name, estacionamiento=self.estacionamiento,
+                    query=self.query, container=self.panel_report,
+                    on_back=self.mostrar_menu)
+
+    def abrir_usuarios(self):
+        """Abre la administración de usuarios en el área derecha."""
+        if not self.embebido:
+            self.report_controller.view_crud_usuarios()
+            return
+        for widget in self.panel_report.winfo_children():
+            widget.destroy()
+        from Views.view_crud_usuarios_tpv import View_CRUD_usuarios
+        View_CRUD_usuarios(estacionamiento=self.estacionamiento,
+                           user_name=self.user_name, query=self.query,
+                           container=self.panel_report, on_back=self.mostrar_menu)
+
+    def mostrar_menu(self):
+        """Regresa al menú de funciones sin cerrar la conexión al estacionamiento."""
+        if not self.embebido:
+            return
+        for widget in self.panel_report.winfo_children():
+            widget.destroy()
+        self.interface()
 
     def desactivar(self) -> None:
         """Desactiva los botones de la interface"""
-        self.panel_report.withdraw()  # oculta la ventana
-        self.boton_admin_usuarios.config(state="disable")
+        self._ocultar_panel()  # oculta la ventana
+        if hasattr(self, "boton_admin_usuarios"):
+            self.boton_admin_usuarios.config(state="disable")
 
     def activar(self) -> None:
         """Activa los botones de la interface """
-        self.panel_report.deiconify()
-        self.boton_admin_usuarios.config(state="normal")
+        self._mostrar_panel()
+        if hasattr(self, "boton_admin_usuarios"):
+            self.boton_admin_usuarios.config(state="normal")
+
+    def _ocultar_panel(self):
+        if not self.embebido:
+            self.panel_report.withdraw()
+
+    def _mostrar_panel(self):
+        if not self.embebido:
+            self.panel_report.deiconify()
 
     def desconectar(self) -> None:
         """Elimina el panel y detiene la ejecución del hilo donde se ejecuta la ventana"""
-        # detener el loop principal
+        if self.embebido:
+            for widget in self.panel_report.winfo_children():
+                widget.destroy()
+            return
         self.panel_report.quit()
-        # Destruye el panel principal
         self.panel_report.destroy()
 
     def salir(self) -> None:
