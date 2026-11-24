@@ -1,7 +1,7 @@
 name: Instaladores Windows de prueba
 on:
   push:
-    branches: ['desarrollo/instaladores-windows']
+    branches: ['desarrollo/instaladores-windows', 'desarrollo/consulta-windows-jorge']
   workflow_dispatch:
 permissions:
   contents: read
